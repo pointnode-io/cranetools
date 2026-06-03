@@ -12,8 +12,7 @@ Each tool is self-contained in its own top-level directory.
 | Crane loading calculator | [`craneloadingscalc/`](craneloadingscalc/) | EN 15011 / EN 13001 proof-of-competence calculator plus a standards reference. Two standalone HTML files — no build, no server. |
 | Hoist duty calculator | [`hoistdutycalculator/`](hoistdutycalculator/) | Selects the required hoist mechanism duty group from load spectrum + utilization — FEM 9.511 / ISO 4301-1:1986 (M1–M8 / 1Dm–5m) and the current ISO 4301-1:2016 cycle-based scheme, side by side. Single standalone HTML file. |
 | FM1 calcs | [`fm1calcs/`](fm1calcs/) | Live rebuild of the firm's Form FM1 design-practice spreadsheet — proof-of-competence checks to BS 2853:1957. Single standalone HTML file. |
-| Crane drive sizer | [`cranedrivesizer/`](cranedrivesizer/) | Sizes the drive (motor power/torque, gearbox ratio, brake torque) for the hoist, long-travel and cross-travel mechanisms, with the anti-skid drive check for travel. Complements the hoist duty calculator. Single standalone HTML file. |
-| Hoist / winch drive sizer | [`hoistdrivesizer/`](hoistdrivesizer/) | Deep motor · gearbox · brake · inverter sizing for one hoist/winch (serial-hoist / Siemens SINAMICS method): static/dynamic/peak/RMS torque, optimum gear ratio, stall margin, and 125% proof-load + brake/service-factor checks. Recommendations round up so it won't undersize. Single standalone HTML file. |
+| Crane drive sizer | [`cranedrivesizer/`](cranedrivesizer/) | One tool — pick the motion (hoist / long-travel / cross-travel) and size the motor, gearbox & brake. The hoist tab is a deep serial-hoist sizer (static/dynamic/peak/RMS torque, optimum & speed-match gear ratio, stall margin, 125% proof-load, brake & service factors, S1/%ED duty, VFD & 87 Hz, per-drive); the travel tabs add the anti-skid drive check. Recommendations round up so it won't undersize. Single standalone HTML file. |
 
 ### `craneloadingscalc/`
 
@@ -34,24 +33,18 @@ Open the file directly in a browser.
 
 ### `cranedrivesizer/`
 
-- `crane-drive-sizer.html` — interactive React calculator that sizes the drive
-  for the hoist, long-travel and cross-travel mechanisms: required motor power &
-  torque (steady and accelerating), gearbox ratio, minimum brake torque, and the
-  anti-skid (drive) check for travel. The deliberate complement to the hoist duty
-  calculator, which classifies the duty group but does not size the motor
-  (it names FEM 9.683 for that).
-
-Open the file directly in a browser.
-
-### `hoistdrivesizer/`
-
-- `hoist-drive-sizer.html` — interactive React calculator that sizes a single
-  hoist/winch drive train (motor, gearbox, holding brake, inverter) by the
-  serial-hoist (Siemens SINAMICS) method: static/dynamic/peak/RMS torque and
-  power, optimum inertia-matched gear ratio, motor stall margin and thermal
-  utilisation, and PASS/FAIL on the 125% proof-load hold and the brake / gearbox
-  service factors. Motor power is the governing of duty and thermal demand,
-  rounded up to the next IEC frame, so it will not undersize.
+- `crane-drive-sizer.html` — interactive React calculator. **One tool, pick the
+  motion** via tabs:
+  - **Hoist** — deep serial-hoist drive sizer: static/dynamic/peak/RMS torque &
+    power, optimum (inertia) and **speed-match** gear ratio, motor stall margin &
+    thermal utilisation, **S1-continuous or %ED** duty, **125% proof-load** and
+    brake/gearbox **service-factor** checks, VFD and the **87 Hz technique**.
+  - **Long-travel / Cross-travel** — running resistance, the **anti-skid drive
+    check**, VFD acceleration with regen, braking/stopping, and a geared-motor spec.
+  Motor power is the governing of duty and thermal demand, rounded up to the next
+  IEC frame, so it will not undersize. **Multiple drives** → figures are shown
+  **per drive** with the combined (× N) total. (Mechanism duty group → use the
+  Hoist Duty Calculator.)
 
 Open the file directly in a browser.
 

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Crane Drive Sizer — hoist / long-travel / cross-travel motor · gearbox · brake</title>
+<title>Crane Drive Sizer — hoist / long-travel / cross-travel · motor · gearbox · brake</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
@@ -30,49 +30,34 @@ const fmt=(x,dp=2)=>(x==null||!isFinite(x))?"—":Number(x).toLocaleString("en-G
 const fmt0=(x)=>(x==null||!isFinite(x))?"—":Math.round(x).toLocaleString("en-GB");
 
 // ════════════════════════════════════════════════════════════════════════════
-//  ENGINEERING DATA & FORMULAE
+//  CRANE DRIVE SIZER — one tool, pick the motion (hoist / long-travel / cross-travel)
 //
-//  Two kinds of value live here, and they are NOT equal in authority:
+//  Authority of values (consistent across the toolkit):
+//   • PHYSICS / KINEMATIC RELATIONS are exact and computed (amber badge):
+//       P = F·v/η ; P = m·g·v/η ; T = 9549.3·P[kW]/n = P/ω ; i = n_motor/n_out ;
+//       J_eq = m·(v/ω)² ; F_adh = μ·N ; reeving/Siemens-style drum-torque forms.
+//   • EMPIRICAL / TABULATED COEFFICIENTS (adhesion, rolling resistance, wind,
+//     brake/proof/overload/service factors, rope Zp, D/d, φ2, %ED) are EDITABLE
+//     "confirm" defaults — published figures differ by standard/edition; the tool
+//     gives the formula and you enter the governing value. Blue badge.
 //
-//   (1) KINEMATIC / DYNAMIC RELATIONS — general mechanics, edition-independent.
-//       Exact; never "tuned". Badged amber in the UI.
-//         P = F·v / η ; P = m·g·v / η         power vs force/load & speed
-//         T = 9549.3·P[kW]/n  (= P/ω)         shaft torque from power & speed
-//         i = n_motor / n_out ; n_out = v/(πD) gear ratio
-//         J_eq = m·(v/ω)²                      moving mass referred as inertia
-//         T_acc = (J_mot + J_eq/η)·α , α=ω/t_a accel torque
-//         η_reeving = (1−η_s^n)/(n(1−η_s))     pulley-system efficiency
-//         S = m·g/(n_falls·η_reeving)          hoist lead-line rope pull
-//         φ2 = φ2,min + β2·v_h                  EN 13001-2 hoisting factor (FORM)
-//         F_adh = μ·N                          anti-skid limit
+//  g = 9.81 m/s².  PER-DRIVE: when more than one drive (motor) is selected, the
+//  load is split EQUALLY and the motor/gearbox/brake figures are reported PER
+//  DRIVE, with the combined (× N) total shown alongside.
 //
-//   (2) EMPIRICAL / TABULATED COEFFICIENTS — adhesion, rolling-resistance terms,
-//       wind, brake factor, rope coefficient Zp, drum D/d minimum, φ2 coeffs.
-//       These are EDITION- and PROJECT-dependent and PUBLISHED VALUES DISAGREE
-//       between sources/editions, so they are EXPOSED AS EDITABLE INPUTS with
-//       typical DEFAULTS, badged "default — confirm" (blue). Verify each against
-//       the controlling standard (EN 14492-2 / ISO 4308 / EN 13001-2 / EN 13135)
-//       before order. A result on a default is INDICATIVE, not normative.
-//
-//  Sizing philosophy: returns the *demanded* power, torque, ratio, *minimum*
-//  brake torque, anti-skid, rope/D-d checks and an *indicative* duty/energy
-//  estimate. Final thermal selection (duty S1–S5 / %ED + permissible starts,
-//  FEM 9.683 / EN 14492-2) and a real motor pick remain the engineer's call.
+//  Scope: a sizing & first-pass verification aid. Final thermal selection
+//  (duty S1–S5 / %ED + permissible starts) and the catalogue motor/gearbox/brake
+//  remain the engineer's call — verify against the supplier's data before order.
 // ════════════════════════════════════════════════════════════════════════════
-const G=9.80665;                              // m/s²
-const Tnm=(kW,n)=>(n>0?9549.296*kW/n:NaN);    // shaft torque [N·m] from power [kW] & speed [rpm]
-const omega=(n)=>2*Math.PI*n/60;              // rad/s from rpm
-// IEC standard motor power ladder (kW) — for "next standard size"
+const G=9.81;
+const Tnm=(kW,n)=>(n>0?9549.296*kW/n:NaN);
+const omega=(n)=>2*Math.PI*n/60;
 const IEC_KW=[0.12,0.18,0.25,0.37,0.55,0.75,1.1,1.5,2.2,3,4,5.5,7.5,11,15,18.5,22,30,37,45,55,75,90,110,132,160,200,250,315,355,400];
 const pickMotor=(P)=>{if(!isFinite(P)||P<=0)return null;for(const k of IEC_KW){if(k>=P*0.999999)return k;}return null;};
-// pulley-system (reeving) efficiency from n supporting falls + nDiv diverting sheaves
-const reevingEff=(n,es,nDiv)=>{n=n||0;es=es||0;nDiv=nDiv||0;if(n<=0||es<=0||es>=1)return NaN;
-  return ((1-Math.pow(es,n))/(n*(1-es)))*Math.pow(es,nDiv);};
 
 const DEF={
-  muAdh:0.15, fRoll:0.5, cFlange:1.5, bearMu:0.02, windP:250, brakeSFhoist:1.6,
-  etaS:0.98, etaMech:0.90, vfdOverload:1.5, breakdownK:2.7, regenEff:0.0,
-  Zp:4.0, minDd:20, phi2min:1.1, beta2:0.34, kCool:0.33, fs:1.25,
+  muAdh:0.15, fRoll:0.5, cFlange:1.5, bearMu:0.02, windP:250,
+  etaMech:0.90, vfdOverload:1.5, breakdownK:2.7, regenEff:0.0, kCool:0.33, fs:1.25,
 };
 
 // ── UI atoms ─────────────────────────────────────────────────────────────────
@@ -92,10 +77,13 @@ const Num=(props)=>(
   <input type="number" {...props}
     className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
 );
-const Row=({k,unit,v,strong,badge})=>(
+const Row=({k,unit,v,strong,badge,ok})=>(
   <React.Fragment>
     <dt className={"text-slate-500 "+(strong?"font-semibold text-slate-700":"")}>{k}{badge&&<Badge tone={badge.tone}>{badge.t}</Badge>}</dt>
-    <dd className={"text-right font-mono "+(strong?"font-bold text-slate-800":"")}>{v}{unit&&<span className="text-slate-400 font-sans"> {unit}</span>}</dd>
+    <dd className={"text-right font-mono "+(strong?"font-bold text-slate-800":"")}>
+      {ok!==undefined&&<span className={"mr-2 text-xs font-bold "+(ok?"text-green-600":"text-red-600")}>{ok?"PASS":"FAIL"}</span>}
+      {v}{unit&&<span className="text-slate-400 font-sans"> {unit}</span>}
+    </dd>
   </React.Fragment>
 );
 const Pill=({ok,children})=>(
@@ -104,7 +92,6 @@ const Pill=({ok,children})=>(
 const Toggle=({on,onClick,children})=>(
   <button onClick={onClick} className={"text-xs px-2 py-1 rounded border "+(on?"bg-amber-500 text-white border-amber-500":"bg-white text-slate-600 border-slate-300")}>{children}</button>
 );
-// speed field with m/min ↔ m/s display toggle (value stored internally as m/min)
 const SpeedField=({label,unit,vMin,onMin})=>{
   const disp = unit==="m/s" ? (vMin==="" ? "" : Math.round((vMin/60)*1000)/1000) : vMin;
   return (
@@ -114,137 +101,160 @@ const SpeedField=({label,unit,vMin,onMin})=>{
     </Field>
   );
 };
-// collapsible input group
 const Group=({title,open,children})=>(
   <details open={open} className="border border-slate-200 rounded-lg mb-3">
     <summary className="cursor-pointer select-none font-semibold text-slate-700 text-sm px-3 py-2 bg-slate-50 rounded-t-lg">{title}</summary>
     <div className="p-3">{children}</div>
   </details>
 );
+// banner stating whether figures are per-drive or for a single drive
+const DriveScope=({nDr})=>(
+  nDr>1
+    ? <div className="rounded-lg border border-sky-300 bg-sky-50 p-2.5 text-xs text-sky-800 print-block">
+        <b>{nDr} drives.</b> Load is split equally — motor, gearbox &amp; brake figures below are <b>PER DRIVE</b>;
+        the <b>combined (× {nDr})</b> total is shown where relevant.
+      </div>
+    : <div className="rounded-lg border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-500 print-block">
+        <b>Single drive.</b> All figures are for one motor / gearbox / brake.
+      </div>
+);
 
-// ── duty cycle / RMS / energy (indicative, shared by all mechanisms) ───────────
-// Simplified trapezoidal move: accelerate (Tpeak), run (Tstatic), decelerate
-// (|Tpeak−2·Tstatic|, resistance/gravity assisting), then dwell. RMS torque per
-// FEM-style equivalent: denom counts standstill at reduced cooling kCool.
+// ── duty cycle / RMS / energy (indicative, travel) ─────────────────────────────
 function cycleCalc(c){
   const {Tstatic,Tpeak,Pstatic,Ppeak,nMot,tAcc,tRun,tDec,dwell,kCool,cph,hpy,tariff,regenEff}=c;
   const w=omega(nMot);
-  const Tdec=Math.abs(Tpeak-2*Tstatic);               // decel torque magnitude (motor)
-  const run=tAcc+tRun+tDec;                             // time in motion
+  const Tdec=Math.abs(Tpeak-2*Tstatic);
+  const run=tAcc+tRun+tDec;
   const denom=run+ (kCool||0)*(dwell||0);
   const Trms=denom>0?Math.sqrt((Tpeak*Tpeak*tAcc+Tstatic*Tstatic*tRun+Tdec*Tdec*tDec)/denom):NaN;
-  const Prms=Trms*w/1000;                               // continuous power req at base speed, kW
-  const ed=(run+dwell)>0?100*run/(run+dwell):NaN;       // duty %ED
-  // energy per cycle (indicative): motoring accel+run, regen on decel
-  const Eacc=0.5*(Pstatic+Ppeak)*tAcc;                  // kJ (kW·s)
+  const Prms=Trms*w/1000;
+  const ed=(run+dwell)>0?100*run/(run+dwell):NaN;
+  const Eacc=0.5*(Pstatic+Ppeak)*tAcc;
   const Erun=Pstatic*tRun;
-  const Pregen=Math.max(0,(2*Tstatic-Tpeak))*w/1000;    // regen power if decel is overhauling, kW
-  const Eregen=0.5*Pregen*tDec;                          // kJ recoverable on decel
-  const EgridCycle=Eacc+Erun-(regenEff||0)*Eregen;      // kJ from grid per cycle
-  const startsHr=(run+dwell)>0?3600/(run+dwell):NaN;     // implied starts/hour (1 move/cycle)
-  const kWhYr=(cph||0)*(hpy||0)*EgridCycle/3600;         // kWh/year
+  const Pregen=Math.max(0,(2*Tstatic-Tpeak))*w/1000;
+  const Eregen=0.5*Pregen*tDec;
+  const EgridCycle=Eacc+Erun-(regenEff||0)*Eregen;
+  const startsHr=(run+dwell)>0?3600/(run+dwell):NaN;
+  const kWhYr=(cph||0)*(hpy||0)*EgridCycle/3600;
   const costYr=kWhYr*(tariff||0);
   return {Tdec,run,Trms,Prms,ed,Eacc,Erun,Pregen,Eregen,EgridCycle,startsHr,kWhYr,costYr};
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-//  HOIST
+//  HOIST  (serial-hoist / winch method; per-drive aware)
 // ════════════════════════════════════════════════════════════════════════════
-function computeHoist(h){
-  const mGross=(h.mLoad||0)+(h.mTackle||0);
-  const vs=(h.vh||0)/60;
-  const W=mGross*G;                                      // gross load force (for rope), N
-  // EN 13001-2 hoisting dynamic factor (form; coeffs editable)
-  const phi2 = h.hcEnable ? ((h.phi2min||0)+(h.beta2||0)*vs) : 1;
-  // counterweight
-  const mCw=h.mCw||0, mNet=mGross-mCw, Wnet=mNet*G;
-  const overhauling = mNet<0;
-  // reeving efficiency (derive or manual)
-  const etaReev = h.deriveEta ? reevingEff(h.falls,h.etaS,h.nDiv) : (h.etaReevManual||0);
-  const etaTot=etaReev*(h.etaMech||0);
-  // steady power on NET load (counterweight assists), motoring divides / regen multiplies
-  const Plift=Wnet*vs/1000;
-  const Pmot = etaTot>0 ? (Plift>=0?Plift/etaTot:Plift*etaTot) : NaN;
-  const PmotMag=Math.abs(Pmot);
-  const w=omega(h.nMot||0);
-  // static torque (net) at motor
-  const Tstat=Tnm(Pmot,h.nMot);
-  // acceleration: inertia of BOTH masses + motor
-  const a=(h.ta>0)?vs/h.ta:NaN;
-  const Jload=w>0?(mGross+mCw)*Math.pow(vs/w,2):NaN;
-  const alpha=(h.ta>0)?w/h.ta:NaN;
-  const Tacc=(etaTot>0)?((h.Jmot||0)+Jload/etaTot)*alpha:NaN;
-  // peak hoisting torque: static (with φ2 on the lifted load) + accel
-  const TstatDyn = Tnm(phi2*Wnet*vs/1000/(etaTot||1), h.nMot);
-  const Tpeak=Math.abs(TstatDyn)+Math.abs(Tacc);
-  const Ppeak=Tpeak*w/1000;
-  // reeving / rope / drum
-  const Slead=(h.falls>0&&etaReev>0)?W/(h.falls*etaReev):NaN;  // lead-line pull, N
-  const vrope=(h.vh||0)*(h.falls||0);
-  const Ddm=(h.Dd||0)/1000;
-  const nDrum=Ddm>0?vrope/(Math.PI*Ddm):NaN;
-  const i=nDrum>0?(h.nMot||0)/nDrum:NaN;
-  // rope safety (EN 14492-2 / ISO 4308 coefficient Zp — editable)
-  const MBLreq=(Slead/1000)*(h.Zp||0);                  // required min breaking load, kN
-  const SFact=(h.ropeMBL>0&&Slead>0)?(h.ropeMBL*1000)/Slead:NaN; // actual factor on lead line
-  const ropeOK=isFinite(SFact)&&SFact>=(h.Zp||0);
-  const ddActual=(h.ropeDia>0)?(h.Dd||0)/h.ropeDia:NaN; // drum / rope diameter ratio
-  const ddOK=isFinite(ddActual)&&ddActual>=(h.minDd||0);
-  // brake — GROSS load, counterweight NOT credited (conservative), referred to motor shaft.
-  // (Tbrake is finalised after the motor pick, since the "× motor torque" basis needs Trated.)
-  const Tload=w>0?W*vs/w:NaN;                            // gross static load torque, lossless
-  // drives + motor pick (per drive). Size on the GREATER of the continuous demand
-  // and the peak-torque demand divided by the usable short-time overload — so the
-  // frame is big enough that its overload covers the acceleration peak.
-  const nDr=Math.max(1,h.nDrives||1);
-  const peakFactor=h.vfd?(h.vfdOverload||1.5):1.6;
-  const TperDrivePeak=Tpeak/nDr;
-  const PperDrive=Math.max(PmotMag/nDr,(Ppeak/nDr)/peakFactor);
-  const motorKW=pickMotor(PperDrive);
-  const Trated=motorKW?Tnm(motorKW,h.nMot):NaN;
-  const Tbreak=Trated*(h.breakdownK||0);                 // breakdown torque, N·m
-  const breakOK=isFinite(Tbreak)&&TperDrivePeak<=Tbreak;
-  // holding-brake torque: factor × static LOAD torque (EN 14492-2 / FEM), OR
-  // factor × rated MOTOR torque (Siemens serial-hoist convention, ≈2×).
-  const Tbrake=(h.brakeBasis==="motor")?(h.brakeSF||0)*(Trated||0):(h.brakeSF||0)*Tload;
-  // VFD achievable accel (torque-limited): budget = min(breakdown, overload×rated)
-  const Tavail=Math.min(Tbreak||Infinity,(h.vfdOverload||0)*(Trated||0));
-  const Taccbudget=Tavail-Math.abs(TstatDyn)/nDr;        // torque available for accel, per drive
-  const aTq=(Taccbudget>0&&w>0&&Jload>0)?(Taccbudget*nDr*etaTot)/((h.Jmot||0)*nDr+Jload)*(vs/w):NaN; // m/s²
-  // gearbox output requirement (for a supplier quote) — torque at the DRUM shaft,
-  // taken directly from the rope tension so it's free of motor-efficiency bookkeeping.
-  const Rdrum=Ddm/2;
-  const gbT2cont=isFinite(Rdrum)?Slead*Rdrum:NaN;        // continuous output torque, N·m
-  const ratioPk=Math.abs(Tstat)>0?Tpeak/Math.abs(Tstat):NaN;
-  const gbT2peak=gbT2cont*ratioPk;                       // accel/peak output torque, N·m
-  const gbT2Nreq=gbT2cont*(h.fs||1);                     // T2N to select against (× service factor)
-  // regen on lowering (continuous) — lowering loaded returns power to the line/resistor
-  const PregenLower=Wnet>0?Wnet*vs*etaTot/1000:NaN;      // kW, steady lowering regen (load assists)
-  // duty cycle / energy (indicative)
-  let cyc=null;
-  if(h.cycEnable){
-    const aR=h.vfd&&h.accelMode==="rate"?(h.accelRate||a):a;
-    const tAcc=aR>0?vs/aR:0;
-    const dAcc=0.5*vs*tAcc, dDec=dAcc;
-    const tDec=tAcc;
-    const tRun=Math.max(0,((h.moveDist||0)-dAcc-dDec)/(vs||1));
-    cyc=cycleCalc({Tstatic:Math.abs(Tstat),Tpeak,Pstatic:PmotMag,Ppeak,nMot:h.nMot,
-      tAcc,tRun,tDec,dwell:h.dwell||0,kCool:h.kCool,cph:h.cph,hpy:h.hpy,tariff:h.tariff,regenEff:h.regenEff});
-  }
+function computeHoist(x){
+  const PI=Math.PI;
+  const mLoad=(x.mL||0)+(x.mH||0);
+  const mG=x.mG||0, mStat=mLoad-mG, mDyn=mLoad+mG;
+  const d=x.d||0, s=x.s||0, v=x.v||0, a=x.a||0;
+  const em=x.eta_mech||0, eg=x.eta_gear||0, et=em*eg, ig=x.i_gear||0;
+  const nDr=Math.max(1,x.nDrives||1);
+
+  // ── mechanism power & drum torque (TOTALS for the whole hoist) ──
+  const P_static=em>0?(mStat*G*v)/em:NaN;
+  const P_dynamic=em>0?(mDyn*a*v)/em:NaN;
+  const P_total=P_static+P_dynamic;
+  const P_regen=mStat*G*v*em;
+  const M_drum_static=(em>0&&s>0)?(mStat*G*d)/(em*2*s):NaN;
+  const M_drum_dynamic=(em>0&&s>0)?(mDyn*a*d)/(em*2*s):NaN;
+  const M_drum_total=M_drum_static+M_drum_dynamic;
+  const n_load=d>0?(s*v)/(PI*d):NaN;                 // drum speed, rev/s
+
+  // ── inertia matching / ratio guidance ──
+  const J_load=mDyn*Math.pow(d/2,2);
+  const i_opt=x.J_motor>0?Math.sqrt((J_load/(s*s)+(x.J_drum||0))/x.J_motor):NaN;
+  const fB=(ig>0&&x.M_motor_rated>0)?(x.M_gearbox_rated||0)/(ig*x.M_motor_rated):NaN;
+  const fB_ok=isFinite(fB)&&fB>=(x.fB_min||0);
+
+  // ── motor speed & torque (PER DRIVE; load shared across nDr) ──
+  const n_motor_rps=d>0?(s*v*ig)/(PI*d):NaN, n_motor_rpm=n_motor_rps*60;
+  const alpha=x.t_acc>0?(2*PI*n_motor_rps)/x.t_acc:NaN;
+  const Mms_tot=(et>0&&s>0&&ig>0)?(mStat*G*d)/(et*2*s*ig):NaN;       // one-motor-equiv static
+  const MloadDyn_tot=(et>0&&s>0&&ig>0)?(mDyn*a*d)/(et*2*s*ig):NaN;   // one-motor-equiv load dyn
+  const Mlow_tot=(et>0&&s>0&&ig>0)?(mStat*G*d*et)/(2*s*ig):NaN;
+  const M_motor_static=Mms_tot/nDr;                                  // per drive
+  const M_motor_dyn=MloadDyn_tot/nDr + (x.J_motor||0)*alpha;         // per drive (own rotor + share)
+  const M_motor_peak=M_motor_static+M_motor_dyn;                     // per drive
+  const M_motor_lower=Mlow_tot/nDr;                                  // per drive
+  // RMS per drive (accel peak included for first t_acc of hoist — conservative)
+  const tH=x.t_hoist||0,tL=x.t_lower||0,tR=x.t_rest||0,kc=x.kCool||0.33;
+  const tAccU=Math.min(x.t_acc||0,tH);
+  const den=tH+tL+kc*tR;
+  const M_rms=den>0?Math.sqrt((M_motor_peak*M_motor_peak*tAccU
+                              +M_motor_static*M_motor_static*Math.max(0,tH-tAccU)
+                              +M_motor_lower*M_motor_lower*tL)/den):NaN;
+  const tOn=tH+tL, tCyc=tOn+tR, ED=tCyc>0?100*tOn/tCyc:NaN;
+  const isS1=x.dutyType==="S1";
+  const ed_ok=isS1?true:(isFinite(ED)&&ED<=(x.motor_ED||0));
+
+  // motor checks (per drive vs per-motor rating)
+  const stallMargin=isFinite(M_motor_peak)&&M_motor_peak>0?(x.M_motor_K||0)/M_motor_peak:NaN;
+  const stall_ok=isFinite(stallMargin)&&stallMargin>=(x.stallFactor||1.3);
+  const motorRatedKW=(x.n_motor_rated>0&&x.M_motor_rated>0)?x.M_motor_rated*x.n_motor_rated*2*PI/60/1000:NaN;
+  const omegaRated=2*PI*(x.n_motor_rated||0)/60;
+  const P_duty_tot=eg>0?((x.control==="vf"?P_total:P_static)/eg):NaN;   // W, total
+  const P_duty_pd=P_duty_tot/nDr;                                       // per drive
+  const P_rms_pd=isFinite(M_rms)?M_rms*omegaRated:NaN;                  // W per drive
+  const P_req_pd=Math.max(isFinite(P_duty_pd)?P_duty_pd:0, isFinite(P_rms_pd)?P_rms_pd:0)||NaN; // per drive
+
+  // 87 Hz (delta): extends SPEED & POWER only; torque unchanged
+  const k87=x.hz87?((x.V_supply||400)/(x.V_delta||230)):1;
+  const f87=((x.V_supply||400)/(x.V_delta||230))*(x.f_base||50);
+  const nBaseEff=(x.n_motor_rated||0)*k87;
+  const Pcap=motorRatedKW*k87;                                          // per motor capability
+  const I_inv_req=x.hz87?Math.sqrt(3)*(x.I_motor_rated||0):(x.I_motor_rated||0);
+  const P_motor_rec=pickMotor((P_req_pd/1000)/k87);                     // per-drive frame to buy
+  const power_ok=isFinite(Pcap)&&Pcap>=P_req_pd/1000;
+  const hz87_speed_ok=(x.n_motor_max||0)>=Math.max(nBaseEff,isFinite(n_motor_rpm)?n_motor_rpm:0);
+  const hz87_invI_ok=(x.I_inverter||0)>=I_inv_req;
+  const hz87_ok=hz87_speed_ok&&hz87_invI_ok&&!!x.hz87_dualvolt&&!!x.hz87_cooling;
+  const thermalUtil=isFinite(M_rms)&&x.M_motor_rated>0?M_rms/x.M_motor_rated:NaN;
+  const thermal_ok=isFinite(thermalUtil)&&thermalUtil<=1;
+
+  // gear-ratio guidance: speed-match so the motor sits at (extended) base speed at v
+  const drumRpm=isFinite(n_load)?n_load*60:NaN;
+  const nTarget=x.hz87?nBaseEff:(x.n_motor_rated||0);
+  const i_speed=drumRpm>0?nTarget/drumRpm:NaN;
+
+  // gearbox output (PER DRIVE) — supplier quote
+  const gbT2cont=isFinite(M_drum_static)?M_drum_static/nDr:NaN;
+  const gbT2peak=isFinite(M_drum_total)?M_drum_total/nDr:NaN;
+  const gbT2Nreq=gbT2cont*(x.fs||1);
+  const gbTorque_ok=(x.M_gearbox_rated||0)>=gbT2peak;
+
+  // ── brake & proof load (PER BRAKE) ──
+  const M_load_motor=(s>0&&ig>0)?((mLoad*G*d)/(2*s*ig))/nDr:NaN;   // per drive, gross, lossless
+  const pf=x.proofFactor||1.25, ov=x.overloadFactor||1.10;
+  const M_load_proof=pf*M_load_motor;
+  const req_2x=(x.brakeFactor||2)*(x.M_motor_rated||0);
+  const req_proof=M_load_proof, req_static=M_load_motor;
+  const brakeReq=Math.max(req_2x,req_proof,req_static);
+  const brake_2x_ok=(x.M_brake_rated||0)>=req_2x;
+  const brake_proof_ok=(x.M_brake_rated||0)>=req_proof;
+  const brake_static_ok=(x.M_brake_rated||0)>=req_static;
+  const load_proof=pf*mLoad, load_over=ov*mLoad;
+
   const warns=[];
-  if(!(h.vh>0))warns.push("Hoist speed must be greater than 0.");
-  if(!(h.falls>0))warns.push("Number of rope falls must be at least 1.");
-  if(!(h.Dd>0))warns.push("Drum diameter must be greater than 0.");
-  if(!(h.nMot>0))warns.push("Motor speed must be greater than 0.");
-  if(!(etaTot>0))warns.push("Efficiencies must resolve to a positive value (check reeving / sheave η).");
-  if(overhauling)warns.push("Counterweight exceeds the loaded hook — the load is OVERHAULING: the motor brakes to raise and drives to lower; size the brake/regen accordingly.");
-  if(h.ropeMBL>0&&!ropeOK)warns.push("Rope safety FAIL: chosen MBL gives factor "+fmt(SFact,2)+" < required Zp "+fmt(h.Zp,2)+".");
-  if(h.ropeDia>0&&!ddOK)warns.push("Drum D/d FAIL: "+fmt(ddActual,1)+" < minimum "+fmt(h.minDd,1)+" — increase drum diameter or reduce rope size.");
-  if(motorKW&&!breakOK)warns.push("Peak torque exceeds the selected motor's breakdown torque — pick a larger frame or extend the accel time.");
-  return {mGross,phi2,mNet,overhauling,etaReev,etaTot,Plift,Pmot,PmotMag,Tstat,a,Jload,Tacc,Tpeak,Ppeak,
-    Slead,vrope,nDrum,i,MBLreq,SFact,ropeOK,ddActual,ddOK,Tload,Tbrake,
-    gbT2cont,gbT2peak,gbT2Nreq,
-    nDr,PperDrive,TperDrivePeak,motorKW,Trated,Tbreak,breakOK,aTq,PregenLower,cyc,warns};
+  if(!(d>0))warns.push("Drum diameter must be > 0.");
+  if(!(s>0))warns.push("Reeving factor must be ≥ 1.");
+  if(!(ig>0))warns.push("Gear ratio i_gear must be > 0.");
+  if(!(et>0))warns.push("Efficiencies must be > 0.");
+  if(mStat<0)warns.push("Counterweight exceeds total load — overhauling; size the brake/drive for the worst case.");
+  if(isFinite(n_motor_rpm)&&x.n_motor_rated>0&&n_motor_rpm<0.2*x.n_motor_rated)
+    warns.push("Motor speed at hoisting velocity ("+fmt0(n_motor_rpm)+" rpm) < 20% of rated — use the recommended ratio or oversize the inverter.");
+  if(x.fieldWeak)warns.push("Field weakening: stall torque falls above base speed — check the motor torque–speed curve.");
+  if(x.hz87&&isFinite(n_motor_rpm)&&n_motor_rpm>nBaseEff*1.0001)
+    warns.push("Operating speed ("+fmt0(n_motor_rpm)+" rpm) is above the 87 Hz base speed ("+fmt0(nBaseEff)+" rpm) — field weakening, torque falls ∝ 1/f.");
+  if(x.hz87&&!(x.I_motor_rated>0))warns.push("Enter the motor rated (star) current so the inverter (delta) current can be sized.");
+
+  return {nDr,mLoad,mStat,mDyn,P_static,P_dynamic,P_total,P_regen,M_drum_static,M_drum_dynamic,M_drum_total,n_load,
+    J_load,i_opt,i_speed,fB,fB_ok,gbT2cont,gbT2peak,gbT2Nreq,gbTorque_ok,n_motor_rpm,
+    M_motor_static,M_motor_dyn,M_motor_peak,M_motor_lower,M_rms,ED,isS1,ed_ok,
+    stallMargin,stall_ok,motorRatedKW,P_duty_tot,P_duty_pd,P_req_pd,P_motor_rec,power_ok,thermalUtil,thermal_ok,
+    k87,f87,nBaseEff,Pcap,I_inv_req,hz87_speed_ok,hz87_invI_ok,hz87_ok,
+    M_load_motor,M_load_proof,req_2x,req_proof,req_static,brakeReq,brake_2x_ok,brake_proof_ok,brake_static_ok,
+    load_proof,load_over,warns};
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -263,7 +273,6 @@ function computeTravel(t){
   const i=nWheel>0?(t.nMot||0)/nWheel:NaN;
   const w=omega(t.nMot||0);
   const Tstat=Tnm(Pstat,t.nMot);
-  // acceleration — by time, or (VFD) by rate
   const aReq=t.vfd&&t.accelMode==="rate"?(t.accelRate||0):((t.ta>0)?vs/t.ta:NaN);
   const tAcc=aReq>0?vs/aReq:NaN;
   const Facc=m*aReq;
@@ -273,13 +282,10 @@ function computeTravel(t){
   const alpha=tAcc>0?w/tAcc:NaN;
   const Tacc=(t.etaMech>0)?((t.Jmot||0)+Jload/t.etaMech)*alpha:NaN;
   const Tpeak=Tstat+Tacc;
-  // anti-skid (driving)
   const Ndriven=(t.nW>0)?W*((t.nD||0)/t.nW):NaN;
   const Fadh=(t.muAdh||0)*Ndriven;
   const uSkid=Fadh>0?Fdrive/Fadh:NaN;
-  const aMaxSkid=(m>0)?(Fadh-Fres)/m:NaN;               // skid-limited accel
-  // drives + motor pick. Travel is acceleration-governed: size on the GREATER of the
-  // continuous demand and the peak-torque demand divided by the usable overload.
+  const aMaxSkid=(m>0)?(Fadh-Fres)/m:NaN;
   const nDr=Math.max(1,t.nDrives||1);
   const peakFactor=t.vfd?(t.vfdOverload||1.5):1.6;
   const PperDriveStat=Math.max(Pstat/nDr,(isFinite(Ppeak)?Ppeak:Pstat)/nDr/peakFactor);
@@ -287,30 +293,24 @@ function computeTravel(t){
   const Trated=motorKW?Tnm(motorKW,t.nMot):NaN;
   const Tbreak=Trated*(t.breakdownK||0);
   const breakOK=isFinite(Tbreak)&&(Tpeak/nDr)<=Tbreak;
-  // VFD torque-limited accel: available motor torque → tractive force at the wheels → accel
   const Tavail=Math.min(Tbreak||Infinity,(t.vfdOverload||0)*(Trated||0));
-  const FtractAvail=(isFinite(Tavail)&&isFinite(i)&&Dwm>0)?(Tavail*nDr*i*t.etaMech)/(Dwm/2):NaN; // N at wheels
+  const FtractAvail=(isFinite(Tavail)&&isFinite(i)&&Dwm>0)?(Tavail*nDr*i*t.etaMech)/(Dwm/2):NaN;
   const aTorque=(isFinite(FtractAvail)&&m>0)?(FtractAvail-Fres)/m:NaN;
   const aAchieve=Math.min(isFinite(aMaxSkid)?aMaxSkid:Infinity, isFinite(aTorque)?aTorque:Infinity);
-  const accelLimitedBy = (aMaxSkid<=aTorque)?"wheel/rail slip":"motor / VFD torque";
-  // braking / stopping
+  const accelLimitedBy=(aMaxSkid<=aTorque)?"wheel/rail slip":"motor / VFD torque";
   const tb=t.tb||0;
   const ab=tb>0?vs/tb:NaN;
   const sStop=tb>0?vs*tb/2:NaN;
   const uSkidB=Fadh>0?(m*ab)/Fadh:NaN;
-  // gearbox output requirement (for a supplier quote) — torque at the WHEEL shaft
-  // from the tractive force, per driving gearbox.
   const Rwheel=Dwm/2;
-  const gbT2cont=isFinite(Rwheel)?Fres*Rwheel/nDr:NaN;  // continuous output torque, N·m
-  const gbT2peak=isFinite(Rwheel)?Fdrive*Rwheel/nDr:NaN;// accel/peak output torque, N·m
-  const gbT2Nreq=gbT2cont*(t.fs||1);                    // T2N to select against (× service factor)
-  const wheelLoad=t.nW>0?W/t.nW:NaN;                    // per-wheel vertical load (output radial), N
-  // regen on decel (kinetic energy)
-  const Ekin=0.5*m*vs*vs/1000;                          // kJ
-  const Eresist=Fres*(sStop||0)/1000;                   // kJ removed by resistance
-  const Eregen=Math.max(0,Ekin-Eresist);                // kJ to brake resistor / regen per stop
-  const PregenPk=tb>0?2*Eregen/tb:NaN;                  // kW peak (triangular)
-  // duty cycle / energy
+  const gbT2cont=isFinite(Rwheel)?Fres*Rwheel/nDr:NaN;
+  const gbT2peak=isFinite(Rwheel)?Fdrive*Rwheel/nDr:NaN;
+  const gbT2Nreq=gbT2cont*(t.fs||1);
+  const wheelLoad=t.nW>0?W/t.nW:NaN;
+  const Ekin=0.5*m*vs*vs/1000;
+  const Eresist=Fres*(sStop||0)/1000;
+  const Eregen=Math.max(0,Ekin-Eresist);
+  const PregenPk=tb>0?2*Eregen/tb:NaN;
   let cyc=null;
   if(t.cycEnable){
     const dAcc=0.5*vs*(tAcc||0), dDec=0.5*vs*tb;
@@ -334,15 +334,14 @@ function computeTravel(t){
     ab,sStop,uSkidB,Ekin,Eregen,PregenPk,cyc,warns};
 }
 
-// ── shared notes ──────────────────────────────────────────────────────────────
 function ScopeNote(){
   return (
     <div className="rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm text-slate-600 print-block">
       <span className="font-semibold text-slate-700">Demand, not selection.</span> The "next standard motor"
-      is a starting point from the IEC kW ladder against the steady demand; the final pick is governed by
-      thermal duty — type S1–S5 / %ED and permissible <b>starts per hour</b> to <b>FEM 9.683 / EN 14492-2</b>
-      (the duty &amp; energy panel gives an <i>indicative</i> RMS/%ED, not a certified rating). Verify every
-      coefficient flagged <Badge tone="def">default</Badge> against the project and the controlling standard.
+      is the smallest IEC frame meeting the demand (per drive); the final pick is governed by thermal duty —
+      type S1–S5 / %ED and permissible <b>starts per hour</b> (the duty &amp; energy panel gives an
+      <i> indicative</i> RMS/%ED). Verify every coefficient flagged <Badge tone="def">default</Badge> against
+      the project and the controlling standard.
     </div>
   );
 }
@@ -359,15 +358,16 @@ function App(){
   const [preparedBy,setPreparedBy]=useState("");
 
   const [h,setH]=useState({
-    mLoad:5000,mTackle:200,vh:8,Dd:400,nMot:1450,ta:1.0,Jmot:0.05,etaMech:DEF.etaMech,
-    falls:4,etaS:DEF.etaS,nDiv:0,deriveEta:true,etaReevManual:0.95,
-    hcEnable:true,phi2min:DEF.phi2min,beta2:DEF.beta2,
-    mCw:0, brakeSF:DEF.brakeSFhoist, brakeBasis:"load",
-    Zp:DEF.Zp,ropeDia:13,ropeMBL:130,minDd:DEF.minDd,
-    nDrives:1,breakdownK:DEF.breakdownK,fs:DEF.fs,
-    vfd:true,accelMode:"time",accelRate:0.4,vfdOverload:DEF.vfdOverload,regenEff:DEF.regenEff,
-    cycEnable:false,moveDist:6,dwell:20,kCool:DEF.kCool,cph:10,hpy:2000,tariff:0.30,
-    ED:40,starts:150});
+    mL:5000,mH:200,mG:0,
+    d:0.4,s:4,v:0.133,a:0.3,t_acc:1.0,
+    eta_mech:0.90,eta_gear:0.95,
+    n_motor_rated:1450,M_motor_rated:70,M_motor_K:200,J_motor:0.05,J_drum:2.0,motor_ED:40,dutyType:"ED",
+    nDrives:1,i_gear:57,M_gearbox_rated:5000,fB_min:1.0,
+    M_brake_rated:160,brakeFactor:2.0,proofFactor:1.25,overloadFactor:1.10,
+    t_hoist:20,t_lower:20,t_rest:20,kCool:0.33,stallFactor:1.3,
+    control:"vector",fieldWeak:false,
+    hz87:false,V_supply:400,V_delta:230,f_base:50,I_motor_rated:15,
+    n_motor_max:3000,I_inverter:30,hz87_dualvolt:false,hz87_cooling:false});
   const setH1=(k,v)=>setH({...h,[k]:(typeof v==="boolean"||typeof v==="string")?v:(v===""?"":Number(v))});
 
   const ltDefaults={
@@ -391,10 +391,11 @@ function App(){
         <div className="max-w-6xl mx-auto px-5 py-5">
           <h1 className="text-xl font-bold">Crane Drive Sizer</h1>
           <p className="text-slate-300 text-sm mt-1">
-            Motor, gearbox &amp; brake for the <span className="font-semibold text-amber-300">hoist</span>,
-            <span className="font-semibold text-amber-300"> long-travel</span> and
-            <span className="font-semibold text-amber-300"> cross-travel</span> mechanisms — reeving &amp; rope,
-            anti-skid, VFD acceleration, standard-motor pick and an indicative duty/energy estimate.
+            Pick the motion — <span className="font-semibold text-amber-300">hoist</span>,
+            <span className="font-semibold text-amber-300"> long-travel</span> or
+            <span className="font-semibold text-amber-300"> cross-travel</span> — and size the motor, gearbox &amp;
+            brake: power/torque, gear ratio, stall margin, anti-skid (travel), 125% proof-load &amp; service-factor
+            checks, VFD &amp; 87 Hz, with per-drive sizing.
           </p>
         </div>
       </div>
@@ -442,41 +443,33 @@ function App(){
               <h3 className="font-semibold text-slate-700 mb-1">Exact mechanics (badged amber)</h3>
               <ul className="list-disc pl-4 space-y-1 text-xs">
                 <li>P = F·v/η ; P = m·g·v/η &nbsp;|&nbsp; T = 9549.3·P[kW]/n = P/ω</li>
-                <li>i = n<sub>motor</sub>/n<sub>out</sub>, n<sub>out</sub> = v/(π·D)</li>
-                <li>Reflected inertia J<sub>eq</sub> = m·(v/ω)²; T<sub>a</sub> = (J<sub>mot</sub>+J<sub>eq</sub>/η)·α</li>
-                <li>Reeving η = (1−η<sub>s</sub><sup>n</sup>)/(n(1−η<sub>s</sub>)); lead-line S = m·g/(n·η)</li>
-                <li>φ₂ = φ₂,min + β₂·v<sub>h</sub> &nbsp;(EN 13001-2 form)</li>
+                <li>i = n<sub>motor</sub>/n<sub>out</sub>, n<sub>out</sub> = v/(π·D); drum n = s·v/(π·d)</li>
+                <li>Reflected inertia J<sub>eq</sub> = m·(v/ω)²; i<sub>opt</sub> = √[(J<sub>load</sub>/s²+J<sub>drum</sub>)/J<sub>motor</sub>]</li>
+                <li>Drum torque = (m∓m<sub>G</sub>)·g·d/(η·2·s) (+ accel form)</li>
                 <li>Anti-skid F<sub>adh</sub> = μ·N<sub>driven</sub>; demand F<sub>resist</sub>+m·a</li>
-                <li>Rope safety = MBL/S ≥ Z<sub>p</sub>; drum D/d ≥ minimum</li>
+                <li>87 Hz: k = V<sub>supply</sub>/V<sub>delta</sub>; speed &amp; power ×k, torque unchanged</li>
               </ul>
-              <h3 className="font-semibold text-slate-700 mb-1 mt-4">Coefficient defaults <Badge tone="def">editable — confirm</Badge></h3>
-              <ul className="list-disc pl-4 space-y-0.5 text-xs">
-                <li>Adhesion μ={DEF.muAdh}; flange c={DEF.cFlange}; bearing μ={DEF.bearMu}; rolling f={DEF.fRoll} mm</li>
-                <li>In-service wind p={DEF.windP} N/m²; hoist brake factor {DEF.brakeSFhoist}×</li>
-                <li>Sheave η<sub>s</sub>={DEF.etaS}; φ₂,min={DEF.phi2min}, β₂={DEF.beta2}</li>
-                <li>Rope Z<sub>p</sub>={DEF.Zp}; drum D/d min={DEF.minDd}; breakdown {DEF.breakdownK}×; VFD overload {DEF.vfdOverload}×</li>
-              </ul>
+              <h3 className="font-semibold text-slate-700 mb-1 mt-4">Per-drive</h3>
+              <p className="text-xs">With N drives the load is shared equally: motor/gearbox/brake figures are per drive; combined = × N.</p>
             </div>
             <div>
-              <h3 className="font-semibold text-slate-700 mb-1">Why coefficients are inputs, not constants</h3>
-              <p className="text-xs">Published values for the rope coefficient Z<sub>p</sub>, the φ₂ coefficients and the
-                drum/sheave D/d minima <b>differ between standards and editions</b> (e.g. ISO 4308-1 vs EN 14492-2 vs
-                FEM, and 1986 vs current ISO 4301-1 duty bands). Rather than assert one set as authoritative, this tool
-                gives the <b>formula</b> and exposes the coefficient so you enter your house / project figure from the
-                controlling document.</p>
+              <h3 className="font-semibold text-slate-700 mb-1">Coefficients are inputs, not constants</h3>
+              <p className="text-xs">Published values for the rope coefficient, brake/proof/service factors, D/d minima, φ₂ and %ED
+                <b> differ between standards and editions</b>. The tool gives the formula and exposes the coefficient so you enter
+                your house / project figure.</p>
               <h3 className="font-semibold text-slate-700 mb-1 mt-4">Standards context</h3>
               <ul className="list-disc pl-4 space-y-0.5 text-xs">
-                <li><b>EN 14492-1/-2</b> — power-driven winches &amp; hoists: rope, drum/sheave ratios, brake, drive.</li>
-                <li><b>ISO 4308-1</b> — wire-rope selection, coefficient of utilisation Z<sub>p</sub>.</li>
-                <li><b>EN 13001-2</b> — loads incl. hoisting dynamic factor φ₂ and wind.</li>
+                <li><b>EN 14492-1/-2</b> — power-driven winches &amp; hoists.</li>
+                <li><b>EN 13001</b> — crane design, loads &amp; limit states (incl. φ₂, wind).</li>
                 <li><b>EN 13135</b> — equipment / brake requirements.</li>
-                <li><b>FEM 9.683 / FEM 9.511 · ISO 4301-1</b> — drive selection (%ED, starts/h) &amp; duty group (use the Hoist Duty Calculator).</li>
+                <li><b>ISO 4301-1 / FEM</b> — duty group (use the Hoist Duty Calculator).</li>
+                <li><b>EN 60204-32</b> — electrical equipment of hoisting machines.</li>
               </ul>
             </div>
           </div>
           <p className="text-xs text-slate-400 mt-4 border-t border-slate-100 pt-3">
-            Kinematic/dynamic relations are exact mechanics. Tabulated coefficients are typical values exposed as
-            inputs; the duty/energy figures are indicative. Verify against the controlling standard before order.
+            Kinematic/dynamic relations are exact mechanics; tabulated coefficients are typical values exposed as inputs;
+            duty/energy figures are indicative. Verify against the controlling standard before order.
           </p>
         </details>
         <p className="text-center text-xs text-slate-400 mt-4">Levate Solutions Ltd · for crane engineering use · check against the controlling standard before order.</p>
@@ -487,214 +480,200 @@ function App(){
 
 // ── HOIST tab ─────────────────────────────────────────────────────────────────
 function HoistTab({h,set,r,unit}){
+  const nDr=r.nDr;
+  const brakeAllOK=r.brake_2x_ok&&r.brake_proof_ok&&r.brake_static_ok;
   return (
     <div className="bg-white rounded-b-lg rounded-tr-lg shadow-sm border border-slate-200 p-5 grid md:grid-cols-2 gap-6">
+      {/* INPUTS */}
       <div>
-        <Group title="Load & speed" open={true}>
+        {r.warns.length>0 && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800 mb-3">
+            <ul className="list-disc pl-5 space-y-0.5">{r.warns.map((w,i)=><li key={i}>{w}</li>)}</ul>
+          </div>
+        )}
+        <Group title="Load & geometry" open={true}>
+          <p className="text-xs text-slate-400 mb-2">Total load = <b>mL + mH</b>; counterweight mG subtracts statically, adds dynamically.</p>
           <div className="grid grid-cols-2 gap-x-4">
-            <Field label="Rated load (SWL)" hint="kg"><Num value={h.mLoad} min="0" step="50" onChange={e=>set("mLoad",e.target.value)}/></Field>
-            <Field label="Bottom block / tackle" hint="kg"><Num value={h.mTackle} min="0" step="10" onChange={e=>set("mTackle",e.target.value)}/></Field>
-            <SpeedField label="Hoisting speed" unit={unit} vMin={h.vh} onMin={v=>set("vh",v)}/>
-            <Field label="Counterweight" hint="kg, 0 = none"><Num value={h.mCw} min="0" step="50" onChange={e=>set("mCw",e.target.value)}/></Field>
-            <Field label="Drum diameter" hint="mm, pitch dia"><Num value={h.Dd} min="0" step="10" onChange={e=>set("Dd",e.target.value)}/></Field>
-            <Field label="Motor base speed" hint="rpm"><Num value={h.nMot} min="0" step="10" onChange={e=>set("nMot",e.target.value)}/></Field>
-            <Field label="Mechanism efficiency" hint="η gearbox+drum"><Num value={h.etaMech} min="0" max="1" step="0.01" onChange={e=>set("etaMech",e.target.value)}/></Field>
-            <Field label="Motor+brake inertia" hint="kg·m²"><Num value={h.Jmot} min="0" step="0.01" onChange={e=>set("Jmot",e.target.value)}/></Field>
+            <Field label="Payload mL" hint="kg"><Num value={h.mL} min="0" step="50" onChange={e=>set("mL",e.target.value)}/></Field>
+            <Field label="Hook/block mH" hint="kg"><Num value={h.mH} min="0" step="10" onChange={e=>set("mH",e.target.value)}/></Field>
+            <Field label="Counterweight mG" hint="kg, optional"><Num value={h.mG} min="0" step="50" onChange={e=>set("mG",e.target.value)}/></Field>
+            <Field label="Drum diameter d" hint="m"><Num value={h.d} min="0" step="0.01" onChange={e=>set("d",e.target.value)}/></Field>
+            <Field label="Reeving factor s" hint="falls"><Num value={h.s} min="1" step="1" onChange={e=>set("s",e.target.value)}/></Field>
           </div>
         </Group>
-
-        <Group title="Reeving & rope" open={true}>
+        <Group title="Motion & efficiency" open={true}>
           <div className="grid grid-cols-2 gap-x-4">
-            <Field label="Rope falls n" hint="lines supporting load"><Num value={h.falls} min="1" step="1" onChange={e=>set("falls",e.target.value)}/></Field>
-            <Field label="Diverting sheaves" hint="extra (non-reeving)"><Num value={h.nDiv} min="0" step="1" onChange={e=>set("nDiv",e.target.value)}/></Field>
-          </div>
-          <div className="flex gap-2 mb-2">
-            <Toggle on={h.deriveEta} onClick={()=>set("deriveEta",true)}>Derive η from sheaves</Toggle>
-            <Toggle on={!h.deriveEta} onClick={()=>set("deriveEta",false)}>Manual η</Toggle>
-          </div>
-          {h.deriveEta?(
-            <Field label="Sheave efficiency η_s" hint="per sheave (≈0.98 plain, 0.99 roller)"><Num value={h.etaS} min="0.9" max="1" step="0.005" onChange={e=>set("etaS",e.target.value)}/></Field>
-          ):(
-            <Field label="Reeving efficiency η" hint="manual"><Num value={h.etaReevManual} min="0" max="1" step="0.01" onChange={e=>set("etaReevManual",e.target.value)}/></Field>
-          )}
-          <div className="text-xs text-slate-500 mb-2">Reeving η = <span className="font-mono">{fmt(r.etaReev,3)}</span></div>
-          <div className="grid grid-cols-2 gap-x-4">
-            <Field label="Rope coefficient Z_p" hint="EN 14492-2 / ISO 4308 — confirm"><Num value={h.Zp} min="0" step="0.05" onChange={e=>set("Zp",e.target.value)}/></Field>
-            <Field label="Drum D/d minimum" hint="EN 14492-2 / ISO 16625 — confirm"><Num value={h.minDd} min="0" step="0.5" onChange={e=>set("minDd",e.target.value)}/></Field>
-            <Field label="Chosen rope diameter" hint="mm"><Num value={h.ropeDia} min="0" step="0.5" onChange={e=>set("ropeDia",e.target.value)}/></Field>
-            <Field label="Chosen rope MBL" hint="kN"><Num value={h.ropeMBL} min="0" step="1" onChange={e=>set("ropeMBL",e.target.value)}/></Field>
+            <SpeedField label="Hoisting speed v" unit={unit} vMin={h.v*60} onMin={vmin=>set("v", vmin===""?"":vmin/60)}/>
+            <Field label="Acceleration a" hint="m/s²"><Num value={h.a} min="0" step="0.05" onChange={e=>set("a",e.target.value)}/></Field>
+            <Field label="Accel time t_acc" hint="s"><Num value={h.t_acc} min="0.05" step="0.1" onChange={e=>set("t_acc",e.target.value)}/></Field>
+            <Field label="η mechanical" hint="reeving+drum"><Num value={h.eta_mech} min="0" max="1" step="0.01" onChange={e=>set("eta_mech",e.target.value)}/></Field>
+            <Field label="η gearbox" hint=""><Num value={h.eta_gear} min="0" max="1" step="0.01" onChange={e=>set("eta_gear",e.target.value)}/></Field>
           </div>
         </Group>
-
-        <Group title="Dynamic factor & brake" open={false}>
-          <label className="flex items-center gap-2 mb-2 text-sm text-slate-700">
-            <input type="checkbox" checked={h.hcEnable} onChange={e=>set("hcEnable",e.target.checked)}/>
-            Apply hoisting dynamic factor φ₂ to the peak/brake load <Badge>EN 13001-2</Badge>
-          </label>
-          {h.hcEnable&&(
-            <div className="grid grid-cols-2 gap-x-4">
-              <Field label="φ₂,min" hint="default — confirm"><Num value={h.phi2min} min="1" step="0.01" onChange={e=>set("phi2min",e.target.value)}/></Field>
-              <Field label="β₂" hint="× v_h [m/s], default — confirm"><Num value={h.beta2} min="0" step="0.01" onChange={e=>set("beta2",e.target.value)}/></Field>
-            </div>
-          )}
-          <div className="text-sm font-medium text-slate-700 mb-1">Holding-brake basis</div>
-          <div className="flex gap-2 mb-2">
-            <Toggle on={h.brakeBasis==="load"} onClick={()=>{set("brakeBasis","load");set("brakeSF",1.6);}}>× static load torque</Toggle>
-            <Toggle on={h.brakeBasis==="motor"} onClick={()=>{set("brakeBasis","motor");set("brakeSF",2.0);}}>× rated motor torque</Toggle>
-          </div>
-          <Field label="Brake safety factor" hint={h.brakeBasis==="motor"?"× rated motor torque (Siemens serial ≈2.0)":"× static LOAD torque (not motor torque)"}><Num value={h.brakeSF} min="1" step="0.05" onChange={e=>set("brakeSF",e.target.value)}/></Field>
-          <div className="flex flex-wrap gap-1 items-center -mt-1">
-            <span className="text-xs text-slate-400 mr-1">typical:</span>
-            {h.brakeBasis==="motor"?(
-              <React.Fragment>
-                <Toggle on={h.brakeSF==2.0} onClick={()=>set("brakeSF",2.0)}>Siemens serial 2.0</Toggle>
-                <Toggle on={h.brakeSF==1.5} onClick={()=>set("brakeSF",1.5)}>1.5</Toggle>
-                <Toggle on={h.brakeSF==2.5} onClick={()=>set("brakeSF",2.5)}>2.5</Toggle>
-              </React.Fragment>
-            ):(
-              <React.Fragment>
-                <Toggle on={h.brakeSF==1.5} onClick={()=>set("brakeSF",1.5)}>EN 14492-2 ≥1.5</Toggle>
-                <Toggle on={h.brakeSF==1.6} onClick={()=>set("brakeSF",1.6)}>FEM/DIN 1.6–1.8</Toggle>
-                <Toggle on={h.brakeSF==1.75} onClick={()=>set("brakeSF",1.75)}>Hot metal 1.75</Toggle>
-                <Toggle on={h.brakeSF==2.5} onClick={()=>set("brakeSF",2.5)}>Personnel 2.5</Toggle>
-              </React.Fragment>
-            )}
-          </div>
-        </Group>
-
-        <Group title="Acceleration / VFD" open={false}>
-          <label className="flex items-center gap-2 mb-2 text-sm text-slate-700">
-            <input type="checkbox" checked={h.vfd} onChange={e=>set("vfd",e.target.checked)}/> VFD drive
-          </label>
-          <div className="flex gap-2 mb-2">
-            <Toggle on={h.accelMode==="time"} onClick={()=>set("accelMode","time")}>By accel time</Toggle>
-            <Toggle on={h.accelMode==="rate"} onClick={()=>set("accelMode","rate")}>By max accel</Toggle>
-          </div>
-          <div className="grid grid-cols-2 gap-x-4">
-            {h.accelMode==="time"
-              ?<Field label="Acceleration time" hint="s"><Num value={h.ta} min="0.1" step="0.1" onChange={e=>set("ta",e.target.value)}/></Field>
-              :<Field label="Max acceleration" hint="m/s²"><Num value={h.accelRate} min="0.01" step="0.05" onChange={e=>set("accelRate",e.target.value)}/></Field>}
-            {h.vfd&&<Field label="VFD overload" hint="× rated, e.g. 1.5"><Num value={h.vfdOverload} min="1" step="0.1" onChange={e=>set("vfdOverload",e.target.value)}/></Field>}
-            {h.vfd&&<Field label="Regen recovery η" hint="0 = brake resistor"><Num value={h.regenEff} min="0" max="1" step="0.05" onChange={e=>set("regenEff",e.target.value)}/></Field>}
-          </div>
-        </Group>
-
-        <Group title="Drives, gearbox & motor selection" open={false}>
+        <Group title="Motor & drives" open={true}>
           <div className="grid grid-cols-2 gap-x-4">
             <Field label="Drives (motors)" hint="parallel units"><Num value={h.nDrives} min="1" step="1" onChange={e=>set("nDrives",e.target.value)}/></Field>
-            <Field label="Breakdown torque" hint="× rated, motor pull-out"><Num value={h.breakdownK} min="1" step="0.1" onChange={e=>set("breakdownK",e.target.value)}/></Field>
-            <Field label="Gearbox service factor f_s" hint="application factor — confirm"><Num value={h.fs} min="1" step="0.05" onChange={e=>set("fs",e.target.value)}/></Field>
+            <Field label="Rated speed" hint="rpm"><Num value={h.n_motor_rated} min="0" step="10" onChange={e=>set("n_motor_rated",e.target.value)}/></Field>
+            <Field label="Rated torque" hint="N·m, per motor"><Num value={h.M_motor_rated} min="0" step="1" onChange={e=>set("M_motor_rated",e.target.value)}/></Field>
+            <Field label="Stall/breakdown M_K" hint="N·m, per motor"><Num value={h.M_motor_K} min="0" step="5" onChange={e=>set("M_motor_K",e.target.value)}/></Field>
+            <Field label="J motor" hint="kg·m²"><Num value={h.J_motor} min="0" step="0.005" onChange={e=>set("J_motor",e.target.value)}/></Field>
+            <Field label="J drum" hint="kg·m²"><Num value={h.J_drum} min="0" step="0.1" onChange={e=>set("J_drum",e.target.value)}/></Field>
           </div>
-        </Group>
-
-        <Group title="Duty cycle & energy (indicative)" open={false}>
-          <label className="flex items-center gap-2 mb-2 text-sm text-slate-700">
-            <input type="checkbox" checked={h.cycEnable} onChange={e=>set("cycEnable",e.target.checked)}/> Estimate RMS / %ED / energy
+          <div className="text-sm font-medium text-slate-700 mb-1">Motor duty type</div>
+          <div className="flex gap-2 mb-2 items-center flex-wrap">
+            <Toggle on={h.dutyType==="S1"} onClick={()=>set("dutyType","S1")}>S1 continuous</Toggle>
+            <Toggle on={h.dutyType==="ED"} onClick={()=>set("dutyType","ED")}>Intermittent %ED</Toggle>
+            {h.dutyType==="ED"&&<span className="text-xs text-slate-500">rated %ED</span>}
+            {h.dutyType==="ED"&&<input type="number" value={h.motor_ED} min="0" max="100" step="5" onChange={e=>set("motor_ED",e.target.value===""?"":Number(e.target.value))} className="w-16 border border-slate-300 rounded px-1.5 py-1 text-sm"/>}
+          </div>
+          <div className="flex gap-2 items-center">
+            <Toggle on={h.control==="vector"} onClick={()=>set("control","vector")}>Vector</Toggle>
+            <Toggle on={h.control==="vf"} onClick={()=>set("control","vf")}>V/f</Toggle>
+            <label className="flex items-center gap-1 text-xs text-slate-600 ml-2"><input type="checkbox" checked={h.fieldWeak} onChange={e=>set("fieldWeak",e.target.checked)}/> field weakening</label>
+          </div>
+          <label className="flex items-center gap-2 text-sm text-slate-700 mt-2">
+            <input type="checkbox" checked={h.hz87} onChange={e=>set("hz87",e.target.checked)}/> 87 Hz technique (delta) — extend speed &amp; power
           </label>
-          {h.cycEnable&&(
-            <div className="grid grid-cols-2 gap-x-4">
-              <Field label="Move (hoist height)" hint="m per cycle"><Num value={h.moveDist} min="0" step="0.5" onChange={e=>set("moveDist",e.target.value)}/></Field>
-              <Field label="Dwell / cycle" hint="s standstill"><Num value={h.dwell} min="0" step="1" onChange={e=>set("dwell",e.target.value)}/></Field>
-              <Field label="Standstill cooling k" hint="self-vent ≈0.33"><Num value={h.kCool} min="0" max="1" step="0.05" onChange={e=>set("kCool",e.target.value)}/></Field>
-              <Field label="Cycles / hour" hint=""><Num value={h.cph} min="0" step="1" onChange={e=>set("cph",e.target.value)}/></Field>
-              <Field label="Operating h / year" hint=""><Num value={h.hpy} min="0" step="100" onChange={e=>set("hpy",e.target.value)}/></Field>
-              <Field label="Tariff" hint="£/kWh"><Num value={h.tariff} min="0" step="0.01" onChange={e=>set("tariff",e.target.value)}/></Field>
+          {h.hz87&&(
+            <div className="mt-1">
+              <div className="grid grid-cols-2 gap-x-4">
+                <Field label="Supply voltage" hint="V"><Num value={h.V_supply} min="0" step="10" onChange={e=>set("V_supply",e.target.value)}/></Field>
+                <Field label="Motor delta voltage" hint="V (lower of Δ/Y)"><Num value={h.V_delta} min="0" step="5" onChange={e=>set("V_delta",e.target.value)}/></Field>
+                <Field label="Base frequency" hint="Hz"><Num value={h.f_base} min="0" step="1" onChange={e=>set("f_base",e.target.value)}/></Field>
+                <Field label="Motor rated (star) current" hint="A"><Num value={h.I_motor_rated} min="0" step="0.5" onChange={e=>set("I_motor_rated",e.target.value)}/></Field>
+                <Field label="Motor max speed" hint="rpm"><Num value={h.n_motor_max} min="0" step="100" onChange={e=>set("n_motor_max",e.target.value)}/></Field>
+                <Field label="Inverter rated current" hint="A"><Num value={h.I_inverter} min="0" step="1" onChange={e=>set("I_inverter",e.target.value)}/></Field>
+              </div>
+              <label className="flex items-center gap-2 text-sm text-slate-700 mb-1"><input type="checkbox" checked={h.hz87_dualvolt} onChange={e=>set("hz87_dualvolt",e.target.checked)}/> Motor dual-voltage (Δ/Y), delta V = supply</label>
+              <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={h.hz87_cooling} onChange={e=>set("hz87_cooling",e.target.checked)}/> Cooling &amp; bearings/balancing OK at higher speed</label>
             </div>
           )}
+        </Group>
+        <Group title="Gearbox" open={true}>
+          <div className="grid grid-cols-2 gap-x-4">
+            <Field label="Selected ratio i_gear"><Num value={h.i_gear} min="0" step="0.1" onChange={e=>set("i_gear",e.target.value)}/></Field>
+            <div className="flex items-end mb-3"><button onClick={()=>set("i_gear",isFinite(r.i_speed)?Math.round(r.i_speed*10)/10:h.i_gear)} className="text-xs bg-amber-100 hover:bg-amber-200 text-amber-800 rounded px-2 py-1.5 w-full">use speed-match = {fmt(r.i_speed,1)}</button></div>
+            <div className="flex items-end mb-3"><button onClick={()=>set("i_gear",isFinite(r.i_opt)?Math.round(r.i_opt*10)/10:h.i_gear)} className="text-xs bg-slate-200 hover:bg-slate-300 rounded px-2 py-1.5 w-full">use i_opt = {fmt(r.i_opt,1)}</button></div>
+            <div/>
+            <Field label="Rated output torque" hint="N·m, per gearbox"><Num value={h.M_gearbox_rated} min="0" step="50" onChange={e=>set("M_gearbox_rated",e.target.value)}/></Field>
+            <Field label="Min service factor fB" hint="confirm"><Num value={h.fB_min} min="0" step="0.05" onChange={e=>set("fB_min",e.target.value)}/></Field>
+          </div>
+          <p className="text-xs text-slate-400">Pick the ratio by <b>speed-match</b> (motor at base speed when the drum gives v); the inertia-match i_opt is secondary (accel-optimal).</p>
+        </Group>
+        <Group title="Brake & proof load" open={true}>
+          <div className="grid grid-cols-2 gap-x-4">
+            <Field label="Brake rated torque" hint="N·m, per brake"><Num value={h.M_brake_rated} min="0" step="5" onChange={e=>set("M_brake_rated",e.target.value)}/></Field>
+            <div className="flex items-end mb-3"><button onClick={()=>set("M_brake_rated",Math.ceil(r.brakeReq))} className="text-xs bg-slate-200 hover:bg-slate-300 rounded px-2 py-1.5 w-full">use req = {fmt0(r.brakeReq)}</button></div>
+            <Field label="Brake factor" hint="× rated motor torque"><Num value={h.brakeFactor} min="1" step="0.1" onChange={e=>set("brakeFactor",e.target.value)}/></Field>
+            <Field label="Proof-load factor" hint="× rated (test, 1.25)"><Num value={h.proofFactor} min="1" step="0.05" onChange={e=>set("proofFactor",e.target.value)}/></Field>
+            <Field label="Overload factor" hint="operational (1.10)"><Num value={h.overloadFactor} min="1" step="0.05" onChange={e=>set("overloadFactor",e.target.value)}/></Field>
+          </div>
+          <p className="text-xs text-slate-400">Holding brake must be fail-safe (spring-applied, released by power, applied on power loss). EN 14492-2 / EN 13135.</p>
+        </Group>
+        <Group title="Duty cycle (RMS / %ED)" open={false}>
+          <div className="grid grid-cols-3 gap-x-3">
+            <Field label="Hoist t" hint="s"><Num value={h.t_hoist} min="0" step="1" onChange={e=>set("t_hoist",e.target.value)}/></Field>
+            <Field label="Lower t" hint="s"><Num value={h.t_lower} min="0" step="1" onChange={e=>set("t_lower",e.target.value)}/></Field>
+            <Field label="Rest t" hint="s"><Num value={h.t_rest} min="0" step="1" onChange={e=>set("t_rest",e.target.value)}/></Field>
+          </div>
+          <div className="grid grid-cols-2 gap-x-4">
+            <Field label="Standstill cooling k" hint="≈0.33"><Num value={h.kCool} min="0" max="1" step="0.05" onChange={e=>set("kCool",e.target.value)}/></Field>
+            <Field label="Stall margin factor" hint="≥1.3"><Num value={h.stallFactor} min="1" step="0.05" onChange={e=>set("stallFactor",e.target.value)}/></Field>
+          </div>
         </Group>
       </div>
 
       {/* RESULTS */}
       <div className="space-y-5">
-        {r.warns.length>0 && (
-          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
-            <div className="font-semibold mb-1">Check inputs</div>
-            <ul className="list-disc pl-5 space-y-0.5">{r.warns.map((w,i)=><li key={i}>{w}</li>)}</ul>
-          </div>
-        )}
+        <DriveScope nDr={nDr}/>
+
         <div className="rounded-lg shadow-sm border-2 p-5 print-block" style={{borderColor:ACCENT,background:"#fffbeb"}}>
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="font-bold text-slate-800">Required motor &amp; drive</h2>
-            <Badge>P = m·g·v / η</Badge>
-          </div>
-          <dl className="grid grid-cols-2 gap-y-2 text-sm">
-            <Row k="Gross lifted mass" unit="kg" v={fmt0(r.mGross)}/>
-            {h.mCw>0&&<Row k="Net mass (− counterweight)" unit="kg" v={fmt0(r.mNet)}/>}
-            <Row k="Steady hoisting power" unit="kW" v={fmt(r.PmotMag,2)} strong/>
-            <Row k="Motor torque (steady)" unit="N·m" v={fmt(Math.abs(r.Tstat),1)}/>
-            {h.hcEnable&&<Row k="Dynamic factor φ₂" unit="" v={fmt(r.phi2,3)} badge={{t:"EN 13001-2",tone:""}}/>}
-            <Row k="Motor torque (hoist+accel, ×φ₂)" unit="N·m" v={fmt(r.Tpeak,1)} strong badge={{t:"peak",tone:""}}/>
-            <Row k={"Std motor ("+fmt0(r.nDr)+"×, per drive)"} unit="kW" v={r.motorKW?fmt(r.motorKW,1):"—"} strong badge={{t:"IEC pick",tone:"def"}}/>
-            <Row k="Breakdown torque margin" unit="" v={r.motorKW?(r.breakOK?"OK":"LOW"):"—"}/>
+          <h2 className="font-bold text-slate-800 mb-2">Power &amp; torque <Badge>P=m·g·v/η</Badge></h2>
+          <dl className="grid grid-cols-2 gap-y-1.5 text-sm">
+            <Row k="Total load (mL+mH)" unit="kg" v={fmt0(r.mLoad)}/>
+            <Row k="Static power (mechanism)" unit="kW" v={fmt(r.P_static/1000,2)} strong/>
+            <Row k="Total power (mechanism)" unit="kW" v={fmt(r.P_total/1000,2)} strong/>
+            <Row k="Regen power (lower)" unit="kW" v={fmt(r.P_regen/1000,2)}/>
+            <Row k="Drum torque (total)" unit="N·m" v={fmt(r.M_drum_total,0)}/>
+            <Row k={"Static motor torque"+(nDr>1?" /drive":"")} unit="N·m" v={fmt(r.M_motor_static,1)}/>
+            <Row k={"Peak motor torque"+(nDr>1?" /drive":"")} unit="N·m" v={fmt(r.M_motor_peak,1)} strong/>
+            <Row k={"RMS motor torque"+(nDr>1?" /drive":"")} unit="N·m" v={fmt(r.M_rms,1)}/>
           </dl>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-5 print-block">
-          <h2 className="font-bold text-slate-800 mb-3">Reeving, rope &amp; drum</h2>
-          <dl className="grid grid-cols-2 gap-y-2 text-sm">
-            <Row k="Lead-line rope pull" unit="kN" v={fmt(r.Slead/1000,2)} badge={{t:"S=m·g/(n·η)",tone:""}}/>
-            <Row k="Drum speed" unit="rpm" v={fmt(r.nDrum,1)}/>
-            <Row k="Gearbox ratio i" unit=": 1" v={fmt(r.i,2)} strong/>
-            <Row k="Required rope MBL (×Z_p)" unit="kN" v={fmt(r.MBLreq,1)} badge={{t:"Z_p",tone:"def"}}/>
-            <Row k="Actual rope safety factor" unit="" v={isFinite(r.SFact)?fmt(r.SFact,2):"—"}/>
-            <Row k="Drum D/d" unit="" v={isFinite(r.ddActual)?fmt(r.ddActual,1):"—"}/>
+          <h2 className="font-bold text-slate-800 mb-2">Gearbox</h2>
+          <dl className="grid grid-cols-2 gap-y-1.5 text-sm">
+            <Row k="Speed-match ratio (recommended)" unit=":1" v={fmt(r.i_speed,2)} strong badge={{t:"motor↔drum",tone:"def"}}/>
+            <Row k="Optimum ratio i_opt (inertia)" unit=":1" v={fmt(r.i_opt,2)} badge={{t:"secondary",tone:"def"}}/>
+            <Row k="Selected ratio i_gear" unit=":1" v={fmt(h.i_gear,2)}/>
+            <Row k="Motor speed at v" unit="rpm" v={fmt0(r.n_motor_rpm)}/>
+            <Row k="Service factor fB" unit="" v={fmt(r.fB,2)} ok={r.fB_ok}/>
+            <Row k={"Output torque"+(nDr>1?" /drive":"")+" (cont.)"} unit="N·m" v={fmt(r.gbT2cont,0)}/>
+            <Row k={"Rated output torque ≥ peak"+(nDr>1?" /drive":"")} unit="N·m" v={fmt0(h.M_gearbox_rated)} ok={r.gbTorque_ok}/>
           </dl>
-          <div className="flex gap-2 mt-2">
-            {h.ropeMBL>0&&<Pill ok={r.ropeOK}>{r.ropeOK?"ROPE OK":"ROPE FAIL"}</Pill>}
-            {h.ropeDia>0&&<Pill ok={r.ddOK}>{r.ddOK?"D/d OK":"D/d FAIL"}</Pill>}
-          </div>
-        </div>
-
-        <div className="rounded-lg shadow-sm border-2 p-5 print-block" style={{borderColor:"#0369a1",background:"#f0f9ff"}}>
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="font-bold text-slate-800">Geared-motor spec</h2>
-            <Badge tone="def">SEW / Nord / Demag</Badge>
-          </div>
-          <dl className="grid grid-cols-2 gap-y-2 text-sm">
-            <Row k="Motor power (per drive)" unit="kW" v={r.motorKW?fmt(r.motorKW,1):"—"} strong/>
-            <Row k="Output speed n₂" unit="rpm" v={fmt(r.nDrum,1)}/>
-            <Row k="Gear ratio i" unit=": 1" v={fmt(r.i,2)}/>
-            <Row k="Output torque (continuous)" unit="N·m" v={fmt(r.gbT2cont,0)}/>
-            <Row k={"Select gearbox T₂N ≥ (× f_s "+fmt(h.fs,2)+")"} unit="N·m" v={fmt(r.gbT2Nreq,0)} strong/>
-            <Row k="Output torque (accel/peak) T₂B" unit="N·m" v={fmt(r.gbT2peak,0)}/>
-            <Row k="Brake torque (motor shaft)" unit="N·m" v={fmt(r.Tbrake,1)}/>
-          </dl>
-          <p className="text-xs text-slate-500 mt-2">Hand these to the supplier with the duty (%ED &amp; starts/hour from the duty panel). Output torque is taken from the rope tension at the drum, independent of motor losses.</p>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-5 print-block">
-          <h2 className="font-bold text-slate-800 mb-2">Holding brake &amp; VFD</h2>
-          <dl className="grid grid-cols-2 gap-y-2 text-sm">
-            <Row k="Static LOAD torque (motor shaft)" unit="N·m" v={fmt(r.Tload,1)} badge={{t:"gravity, lossless",tone:""}}/>
-            {r.motorKW&&<Row k="Rated motor torque" unit="N·m" v={fmt(r.Trated,1)}/>}
-            <Row k={"Min. brake torque = "+fmt(h.brakeSF,2)+(h.brakeBasis==="motor"?" × motor":" × load")} unit="N·m" v={fmt(r.Tbrake,1)} strong badge={{t:h.brakeBasis==="motor"?"Siemens serial":"EN 14492-2",tone:""}}/>
-            {r.motorKW&&<Row k="(check: brake ÷ load torque)" unit="×" v={fmt(r.Tbrake/r.Tload,2)}/>}
-            {r.motorKW&&<Row k="(check: brake ÷ motor rated)" unit="×" v={fmt(r.Tbrake/r.Trated,2)}/>}
-            {h.vfd&&<Row k="Torque-limited max accel" unit="m/s²" v={fmt(r.aTq,2)} badge={{t:"VFD",tone:""}}/>}
-            {h.vfd&&<Row k="Steady lowering regen" unit="kW" v={fmt(r.PregenLower,2)} badge={{t:"→ resistor",tone:""}}/>}
+          <h2 className="font-bold text-slate-800 mb-2">Motor selection{nDr>1?" (per drive)":""}</h2>
+          <dl className="grid grid-cols-2 gap-y-1.5 text-sm">
+            <Row k="Required power (governing)" unit="kW" v={fmt(r.P_req_pd/1000,2)} strong badge={{t:"no margin",tone:""}}/>
+            <Row k="Smallest standard motor ≥" unit="kW" v={r.P_motor_rec?fmt(r.P_motor_rec,1):"—"} strong badge={{t:h.hz87?"IEC ÷k":"IEC",tone:"def"}}/>
+            {nDr>1&&<Row k={"Combined (× "+nDr+" drives)"} unit="kW" v={r.P_motor_rec?fmt(r.P_motor_rec*nDr,1):"—"}/>}
+            <Row k="Motor rated power (entered)" unit="kW" v={fmt(r.motorRatedKW,2)} ok={h.hz87?undefined:r.power_ok}/>
+            {h.hz87&&<Row k="↳ capability at 87 Hz" unit="kW" v={fmt(r.Pcap,2)} ok={r.power_ok} badge={{t:"×"+fmt(r.k87,2),tone:""}}/>}
+            <Row k={"Stall margin (≥"+fmt(h.stallFactor,2)+")"} unit="×" v={fmt(r.stallMargin,2)} ok={r.stall_ok}/>
+            <Row k="Thermal utilisation (RMS)" unit="%" v={fmt(r.thermalUtil*100,0)} ok={r.thermal_ok}/>
+            <Row k={r.isS1?"Duty (S1 continuous)":("Duty %ED (≤"+fmt0(h.motor_ED)+")")} unit={r.isS1?"":"%"} v={r.isS1?"N/A":fmt(r.ED,0)} ok={r.ed_ok}/>
           </dl>
-          <div className="text-xs text-slate-500 mt-2 space-y-1">
-            <p>Sized as a factor on the <b>static load torque from gravity</b> — <b>not</b> motor torque — computed lossless (gearbox friction only helps hold) at the motor shaft (×i for a drum-shaft brake). Counterweight is not credited.</p>
-            <p>Reported factors (verify against the controlling standard): <b>EN 14492-2 ≥ 1.5×</b>; <b>FEM 1.001 / DIN 15435 ≈ 1.6–1.8×</b>; <b>hot/molten metal ≈ 1.75×</b>; <b>lifting persons ≈ 2.5×</b>. The brake must be <b>fail-safe</b> (spring-applied, released by power, applied automatically on power loss) and have thermal capacity for the duty. High-risk duties (persons, molten metal, single-failure tolerance) require <b>two independent brakes, each able to hold the load alone</b>; the holding brake is separate from controlled/service (dynamic) braking, which the VFD or a service brake provides.</p>
-          </div>
+          <p className="text-xs text-slate-400 mt-2">Required power has <b>no added margin</b> (larger of duty &amp; thermal-RMS); the standard size is the smallest IEC frame that meets it{nDr>1?", per drive":""}. {r.isS1?"Motor is continuous (S1) — %ED is N/A; the thermal-RMS check governs.":"For an SEW/continuous (S1) motor switch duty type to S1 — then %ED is N/A and thermal-RMS governs."} The PASS/FAIL tests the motor you enter, so an exact/special motor can be fitted if cheaper.</p>
         </div>
 
-        {h.cycEnable&&r.cyc&&(
-          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-5 print-block">
-            <h2 className="font-bold text-slate-800 mb-2">Duty &amp; energy <Badge tone="def">indicative</Badge></h2>
-            <dl className="grid grid-cols-2 gap-y-2 text-sm">
-              <Row k="RMS motor torque" unit="N·m" v={fmt(r.cyc.Trms,1)}/>
-              <Row k="RMS continuous power" unit="kW" v={fmt(r.cyc.Prms,2)} strong/>
-              {r.motorKW&&<Row k="vs selected motor rating" unit="" v={r.cyc.Prms<=r.motorKW?"OK — within kW":"RMS > motor kW — uprate"}/>}
-              <Row k="Duty %ED" unit="%" v={fmt(r.cyc.ed,0)}/>
-              <Row k="Implied starts / hour" unit="" v={fmt0(r.cyc.startsHr)}/>
-              <Row k="Energy / cycle" unit="kWh" v={fmt(r.cyc.EgridCycle/3600,3)}/>
-              <Row k="Energy / year" unit="kWh" v={fmt0(r.cyc.kWhYr)}/>
-              <Row k="Running cost / year" unit="£" v={fmt0(r.cyc.costYr)} strong/>
+        {h.hz87&&(
+          <div className="rounded-lg shadow-sm border-2 p-5 print-block" style={{borderColor:r.hz87_ok?"#16a34a":"#dc2626",background:r.hz87_ok?"#f0fdf4":"#fef2f2"}}>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="font-bold text-slate-800">87 Hz (delta) — speed/power only</h2>
+              <Pill ok={r.hz87_ok}>{r.hz87_ok?"SUITABLE":"CHECK"}</Pill>
+            </div>
+            <dl className="grid grid-cols-2 gap-y-1.5 text-sm">
+              <Row k="87 Hz base frequency" unit="Hz" v={fmt(r.f87,1)}/>
+              <Row k="Extended base speed" unit="rpm" v={fmt0(r.nBaseEff)} strong badge={{t:"constant torque",tone:""}}/>
+              <Row k="Power capability (× k)" unit="kW" v={fmt(r.Pcap,2)} strong/>
+              <Row k="Required inverter current" unit="A" v={fmt(r.I_inv_req,1)} strong badge={{t:"√3 × rated",tone:""}}/>
+              <Row k="Motor max speed ≥ base" unit="rpm" v={fmt0(h.n_motor_max)} ok={r.hz87_speed_ok}/>
+              <Row k="Inverter ≥ delta current" unit="A" v={fmt(h.I_inverter,1)} ok={r.hz87_invI_ok}/>
+              <Row k="Dual-voltage motor confirmed" unit="" v={h.hz87_dualvolt?"yes":"no"} ok={h.hz87_dualvolt}/>
+              <Row k="Cooling/bearings confirmed" unit="" v={h.hz87_cooling?"yes":"no"} ok={h.hz87_cooling}/>
             </dl>
-            <p className="text-xs text-slate-400 mt-2">Trapezoidal-move estimate; verify thermal rating to FEM 9.683 / EN 14492-2.</p>
+            <p className="text-xs text-slate-500 mt-2">Torque (rated/peak/stall) is unchanged — only speed &amp; power extend (×k). Size the inverter for the delta current; re-check the gear ratio &amp; gearbox thermal at the higher speed.</p>
           </div>
         )}
+
+        <div className="rounded-lg shadow-sm border-2 p-5 print-block" style={{borderColor:brakeAllOK?"#16a34a":"#dc2626",background:brakeAllOK?"#f0fdf4":"#fef2f2"}}>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-bold text-slate-800">Holding brake &amp; 125% proof load{nDr>1?" (per brake)":""}</h2>
+            <Pill ok={brakeAllOK}>{brakeAllOK?"PASS":"FAIL"}</Pill>
+          </div>
+          <dl className="grid grid-cols-2 gap-y-1.5 text-sm">
+            <Row k={"Static load torque"+(nDr>1?" /brake":"")} unit="N·m" v={fmt(r.M_load_motor,1)} badge={{t:"gross, lossless",tone:""}}/>
+            <Row k={"At "+fmt(h.proofFactor,2)+"× proof load"} unit="N·m" v={fmt(r.M_load_proof,1)}/>
+            <Row k="Recommended brake torque" unit="N·m" v={fmt0(r.brakeReq)} strong/>
+            <Row k="Brake rated torque (entered)" unit="N·m" v={fmt0(h.M_brake_rated)} strong/>
+            <Row k={"≥ "+fmt(h.brakeFactor,1)+"× motor rated ("+fmt0(r.req_2x)+")"} unit="" v={""} ok={r.brake_2x_ok}/>
+            <Row k={"holds "+fmt(h.proofFactor,2)+"× proof ("+fmt0(r.req_proof)+")"} unit="" v={""} ok={r.brake_proof_ok}/>
+            <Row k={"exceeds static load ("+fmt0(r.req_static)+")"} unit="" v={""} ok={r.brake_static_ok}/>
+          </dl>
+          <p className="text-xs text-slate-500 mt-2">Recommended brake torque is the worst case of the factor-on-motor-torque, the 125% proof-load hold, and the static-load checks — sized on the static load torque, computed lossless (gearbox friction only helps hold).</p>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-5 print-block">
+          <h2 className="font-bold text-slate-800 mb-2">Overload / proof loads</h2>
+          <dl className="grid grid-cols-2 gap-y-1.5 text-sm">
+            <Row k="Rated load" unit="kg" v={fmt0(r.mLoad)}/>
+            <Row k={fmt0(h.overloadFactor*100)+"% operational overload"} unit="kg" v={fmt0(r.load_over)}/>
+            <Row k={fmt0(h.proofFactor*100)+"% proof (test) load"} unit="kg" v={fmt0(r.load_proof)} strong/>
+          </dl>
+        </div>
         <ScopeNote/>
       </div>
     </div>
@@ -705,6 +684,7 @@ function HoistTab({h,set,r,unit}){
 function TravelTab({t,set,r,title,massHint,unit}){
   const skidOK=isFinite(r.uSkid)&&r.uSkid<=1;
   const skidBOK=isFinite(r.uSkidB)&&r.uSkidB<=1;
+  const nDr=r.nDr;
   return (
     <div className="bg-white rounded-b-lg rounded-tr-lg shadow-sm border border-slate-200 p-5 grid md:grid-cols-2 gap-6">
       <div>
@@ -772,7 +752,7 @@ function TravelTab({t,set,r,title,massHint,unit}){
           <div className="grid grid-cols-2 gap-x-4">
             <Field label="Drives (motors)" hint="parallel units"><Num value={t.nDrives} min="1" step="1" onChange={e=>set("nDrives",e.target.value)}/></Field>
             <Field label="Breakdown torque" hint="× rated"><Num value={t.breakdownK} min="1" step="0.1" onChange={e=>set("breakdownK",e.target.value)}/></Field>
-            <Field label="Gearbox service factor f_s" hint="SEW f_B / application — confirm"><Num value={t.fs} min="1" step="0.05" onChange={e=>set("fs",e.target.value)}/></Field>
+            <Field label="Gearbox service factor f_s" hint="application — confirm"><Num value={t.fs} min="1" step="0.05" onChange={e=>set("fs",e.target.value)}/></Field>
           </div>
         </Group>
 
@@ -801,6 +781,7 @@ function TravelTab({t,set,r,title,massHint,unit}){
             <ul className="list-disc pl-5 space-y-0.5">{r.warns.map((w,i)=><li key={i}>{w}</li>)}</ul>
           </div>
         )}
+        <DriveScope nDr={nDr}/>
         <div className="rounded-lg shadow-sm border-2 p-5 print-block" style={{borderColor:skidOK?"#16a34a":"#dc2626",background:skidOK?"#f0fdf4":"#fef2f2"}}>
           <div className="flex items-center justify-between mb-2">
             <h2 className="font-bold text-slate-800">Anti-skid (drive)</h2>
@@ -819,16 +800,17 @@ function TravelTab({t,set,r,title,massHint,unit}){
 
         <div className="rounded-lg shadow-sm border-2 p-5 print-block" style={{borderColor:ACCENT,background:"#fffbeb"}}>
           <div className="flex items-center justify-between mb-2">
-            <h2 className="font-bold text-slate-800">Required motor &amp; drive</h2>
+            <h2 className="font-bold text-slate-800">Required motor &amp; drive{nDr>1?" (per drive)":""}</h2>
             <Badge>P = F·v / η</Badge>
           </div>
           <dl className="grid grid-cols-2 gap-y-2 text-sm">
-            <Row k="Steady drive power" unit="kW" v={fmt(r.Pstat,2)} strong/>
-            <Row k="Motor torque (steady)" unit="N·m" v={fmt(r.Tstat,1)}/>
-            <Row k="Motor torque (steady+accel)" unit="N·m" v={fmt(r.Tpeak,1)} strong badge={{t:"peak",tone:""}}/>
+            <Row k="Steady drive power (total)" unit="kW" v={fmt(r.Pstat,2)} strong/>
+            <Row k="Motor torque (steady, total)" unit="N·m" v={fmt(r.Tstat,1)}/>
+            <Row k="Motor torque (steady+accel, total)" unit="N·m" v={fmt(r.Tpeak,1)} strong badge={{t:"peak",tone:""}}/>
             <Row k="Wheel speed" unit="rpm" v={fmt(r.nWheel,1)}/>
             <Row k="Gearbox ratio i" unit=": 1" v={fmt(r.i,2)} strong/>
-            <Row k={"Std motor ("+fmt0(r.nDr)+"×, per drive)"} unit="kW" v={r.motorKW?fmt(r.motorKW,1):"—"} strong badge={{t:"IEC pick",tone:"def"}}/>
+            <Row k={"Std motor"+(nDr>1?" /drive":"")} unit="kW" v={r.motorKW?fmt(r.motorKW,1):"—"} strong badge={{t:"IEC pick",tone:"def"}}/>
+            {nDr>1&&<Row k={"Combined (× "+nDr+" drives)"} unit="kW" v={r.motorKW?fmt(r.motorKW*nDr,1):"—"}/>}
             <Row k="Breakdown torque margin" unit="" v={r.motorKW?(r.breakOK?"OK":"LOW"):"—"}/>
           </dl>
         </div>
@@ -850,19 +832,19 @@ function TravelTab({t,set,r,title,massHint,unit}){
 
         <div className="rounded-lg shadow-sm border-2 p-5 print-block" style={{borderColor:"#0369a1",background:"#f0f9ff"}}>
           <div className="flex items-center justify-between mb-2">
-            <h2 className="font-bold text-slate-800">Geared-motor spec</h2>
+            <h2 className="font-bold text-slate-800">Geared-motor spec{nDr>1?" (per drive)":""}</h2>
             <Badge tone="def">SEW / Nord / Demag</Badge>
           </div>
           <dl className="grid grid-cols-2 gap-y-2 text-sm">
             <Row k="Motor power (per drive)" unit="kW" v={r.motorKW?fmt(r.motorKW,1):"—"} strong/>
             <Row k="Output speed n₂" unit="rpm" v={fmt(r.nWheel,1)}/>
             <Row k="Gear ratio i" unit=": 1" v={fmt(r.i,2)}/>
-            <Row k="Output torque (continuous)" unit="N·m" v={fmt(r.gbT2cont,0)}/>
+            <Row k={"Output torque (cont.)"+(nDr>1?" /drive":"")} unit="N·m" v={fmt(r.gbT2cont,0)}/>
             <Row k={"Select gearbox T₂N ≥ (× f_s "+fmt(t.fs,2)+")"} unit="N·m" v={fmt(r.gbT2Nreq,0)} strong/>
-            <Row k="Output torque (accel/peak) T₂B" unit="N·m" v={fmt(r.gbT2peak,0)}/>
+            <Row k={"Output torque (peak)"+(nDr>1?" /drive":"")} unit="N·m" v={fmt(r.gbT2peak,0)}/>
             <Row k="Output radial load (wheel)" unit="kN" v={fmt(r.wheelLoad/1000,2)}/>
           </dl>
-          <p className="text-xs text-slate-500 mt-2">Hand these to the supplier with the duty (%ED &amp; starts/hour from the duty panel). Travel output torque is the tractive force × wheel radius, per driving gearbox.</p>
+          <p className="text-xs text-slate-500 mt-2">Hand these to the supplier with the duty (%ED &amp; starts/hour). Output torque = tractive force × wheel radius, per driving gearbox.</p>
         </div>
 
         {t.cycEnable&&r.cyc&&(
@@ -878,7 +860,7 @@ function TravelTab({t,set,r,title,massHint,unit}){
               <Row k="Energy / year" unit="kWh" v={fmt0(r.cyc.kWhYr)}/>
               <Row k="Running cost / year" unit="£" v={fmt0(r.cyc.costYr)} strong/>
             </dl>
-            <p className="text-xs text-slate-400 mt-2">Trapezoidal-move estimate; verify thermal rating to FEM 9.683.</p>
+            <p className="text-xs text-slate-400 mt-2">Trapezoidal-move estimate; verify thermal rating against the supplier data.</p>
           </div>
         )}
         <ScopeNote/>

@@ -16,8 +16,7 @@ its own top-level directory and is self-contained.
 | Crane loading calculator | `craneloadingscalc/` | EN 15011 / EN 13001 proof-of-competence calculator + standards reference (single-file HTML/React apps, no build) |
 | Hoist duty calculator | `hoistdutycalculator/` | Mechanism duty group from load spectrum + utilization — FEM 9.511 / ISO 4301-1:1986 and ISO 4301-1:2016, side by side |
 | FM1 calcs | `fm1calcs/` | Live rebuild of the firm's Form FM1 design-practice spreadsheet — proof-of-competence to BS 2853:1957 |
-| Crane drive sizer | `cranedrivesizer/` | Motor power/torque, gearbox ratio and brake torque for hoist / long-travel / cross-travel, with the anti-skid drive check for travel (complements the hoist duty calculator; FEM 9.683 context) |
-| Hoist / winch drive sizer | `hoistdrivesizer/` | Deep motor · gearbox · brake · inverter sizing for a single hoist/winch (serial-hoist / Siemens SINAMICS method): static/dynamic/peak/RMS torque, optimum gear ratio, stall margin, 125% proof-load and brake/service-factor checks. Recommendations round up (won't undersize) |
+| Crane drive sizer | `cranedrivesizer/` | One tool, pick the motion: motor · gearbox · brake sizing for hoist / long-travel / cross-travel. Hoist tab is the deep serial-hoist sizer (static/dynamic/peak/RMS torque, optimum & speed-match gear ratio, stall margin, 125% proof-load, brake & service factors, S1/%ED duty, 87 Hz, per-drive). Travel tabs add the anti-skid drive check. Recommendations round up (won't undersize) |
 
 When you add a new tool, create a new top-level directory and give it its own
 `CLAUDE.md` (and `README.md`).
