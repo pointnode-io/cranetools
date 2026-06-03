@@ -82,16 +82,23 @@ CatalogItem {
 }
 ```
 
-### 3.3 Quote (Supabase)
+### 3.3 Quote (Supabase) — with versioned revisions
+A Quote is a header + a history of **immutable revisions** (Rev A/B/C). A new
+revision is created when the spec or price changes; the latest live one is current.
 ```
 Quote {
-  id, ref, customer, date, validUntil, status   // draft|sent|won|lost
+  id, ref, customer, currentRev      // e.g. "Q-1042", current = "C"
+  revisions: QuoteRevision[]
+}
+QuoteRevision {
+  rev,                               // A | B | C ...
+  date, validUntil, status,          // draft|sent|won|lost|superseded
   spec: CraneSpec
   engineResults { weightT, dutyGroup, installedKW, driveSelections }
   lines: QuoteLine[]
   commercials { steelRatePerT, marginSteel, marginByCategory{...} }   // overhead baked into margins
   totals { steelwork, boughtOut, labour, delivery, price }            // no separate overhead line
-  outcome { wonLost, actualOutturn? }            // calibration feedback
+  changeNote, outcome { wonLost, actualOutturn? }   // calibration feedback on the won/lost rev
 }
 QuoteLine {
   category, description, source,   // catalog | manual | parametric
@@ -162,7 +169,7 @@ known). Periodically tune `£/t`, margin and parametric curves from outcomes. Th
 - ~~Quote scope: single crane vs project~~ → **one quote = one crane for now**
   (Quote holds a single CraneSpec; multi-crane/project + options/spares deferred).
 - Delivery: pass-through (no margin) — confirm.
-- Quote revisions/versioning; currency/VAT; roles/permissions.
+- Currency / VAT handling; roles / permissions.
 - Weight models for double-girder / gantry / jib.
 - Quote-doc boilerplate (inclusions/exclusions/lead time/validity/terms).
 
@@ -182,3 +189,4 @@ known). Periodically tune `£/t`, margin and parametric curves from outcomes. Th
   into the line margins (no separate overhead %); labour never marked up.
 - Catalog presents matching options for the estimator to choose (not auto-pick);
   manual override always available.
+- Quotes are versioned: immutable revisions (Rev A/B/C), latest live = current.
