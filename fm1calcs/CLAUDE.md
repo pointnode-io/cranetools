@@ -77,6 +77,20 @@ guards them — keep all sheets ✓ green.
 These are deliberate. If a future change "corrects" them, it must be a
 documented engineering decision in the PR, not an incidental edit.
 
+## Section properties (Blue Book provenance)
+
+`UBDATA` is the firm's "Section misc" register. Cross-checked against SCI P363
+(Blue Book): for every section the tabulated `Ix` sits ~1–2% above a no-fillet
+geometry calc, which is the expected root-fillet contribution — i.e. the values
+agree with published Blue Book properties (spot checks: 610x229x125 `Ix` 98579
+vs 98610; 305x305x198 `Zx` 2995 exact).
+
+A few entries are **superseded serial sizes** kept for historical jobs and
+flagged via `LEGACY` in the UI (452x152x60/67 → 457x152; 452x191x67/82/89/98 →
+457x191; 533x210x90 → 533x210x92). Do not delete them (they tie to old calcs);
+if you refresh the register to current sizes, keep the legacy ones available and
+keep the `LEGACY` map in sync.
+
 ## Engineering caveat
 
 BS 2853:1957 is a **withdrawn** standard, retained as the firm's documented
