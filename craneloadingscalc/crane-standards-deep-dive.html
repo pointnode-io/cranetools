@@ -1,0 +1,1253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Crane Design Standards — Deep Dive Reference</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:ital,wght@0,300;0,400;0,600;0,700;1,300&display=swap');
+
+  :root {
+    --bg: #0d0f14;
+    --surface: #141720;
+    --surface2: #1c2030;
+    --border: #2a3045;
+    --border-bright: #3d4f72;
+    --accent: #e8a020;
+    --accent2: #4a8fd4;
+    --accent3: #5cbc80;
+    --accent-red: #d45a4a;
+    --text: #c8d0e0;
+    --text-dim: #7a8598;
+    --text-bright: #eaf0ff;
+    --highlight: rgba(232, 160, 32, 0.08);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'IBM Plex Sans', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.65;
+  }
+
+  /* Header */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 32px 40px 28px;
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    z-index: 100;
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 20px;
+  }
+  .header-left {}
+  .header-tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--accent);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  header h1 {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text-bright);
+    letter-spacing: -0.02em;
+  }
+  header h1 span { color: var(--accent); }
+  .header-right {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--text-dim);
+    text-align: right;
+    line-height: 1.8;
+  }
+
+  /* Layout */
+  .layout { display: flex; min-height: calc(100vh - 85px); }
+
+  /* Sidebar nav */
+  aside {
+    width: 240px;
+    flex-shrink: 0;
+    border-right: 1px solid var(--border);
+    padding: 24px 0;
+    position: sticky;
+    top: 85px;
+    height: calc(100vh - 85px);
+    overflow-y: auto;
+  }
+  .nav-section-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    padding: 16px 20px 6px;
+  }
+  aside a {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 20px;
+    color: var(--text-dim);
+    text-decoration: none;
+    font-size: 12.5px;
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+  }
+  aside a:hover { color: var(--text-bright); background: var(--surface); border-left-color: var(--border-bright); }
+  aside a.active { color: var(--accent); border-left-color: var(--accent); background: var(--highlight); }
+  aside a .dot {
+    width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+  }
+
+  /* Main content */
+  main {
+    flex: 1;
+    padding: 40px 48px;
+    max-width: 980px;
+  }
+
+  /* Sections */
+  section {
+    margin-bottom: 60px;
+    scroll-margin-top: 100px;
+  }
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 24px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-num {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    color: var(--accent);
+    background: var(--highlight);
+    border: 1px solid rgba(232,160,32,0.25);
+    padding: 3px 8px;
+    border-radius: 3px;
+  }
+  h2 {
+    font-size: 19px;
+    font-weight: 600;
+    color: var(--text-bright);
+    letter-spacing: -0.02em;
+  }
+  h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-bright);
+    margin-bottom: 8px;
+    margin-top: 20px;
+  }
+  p { color: var(--text); margin-bottom: 10px; }
+
+  /* Standard cards */
+  .std-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    margin-bottom: 16px;
+    overflow: hidden;
+    transition: border-color 0.2s;
+    scroll-margin-top: 100px;
+  }
+  .std-card:hover { border-color: var(--border-bright); }
+  .std-card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 16px 20px;
+    cursor: pointer;
+    user-select: none;
+  }
+  .std-badge {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    padding: 2px 7px;
+    border-radius: 3px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .badge-core { background: rgba(74,143,212,0.15); color: var(--accent2); border: 1px solid rgba(74,143,212,0.3); }
+  .badge-structural { background: rgba(92,188,128,0.12); color: var(--accent3); border: 1px solid rgba(92,188,128,0.25); }
+  .badge-equipment { background: rgba(232,160,32,0.12); color: var(--accent); border: 1px solid rgba(232,160,32,0.25); }
+  .badge-electrical { background: rgba(212,90,74,0.12); color: var(--accent-red); border: 1px solid rgba(212,90,74,0.25); }
+  .badge-safety { background: rgba(180,120,255,0.12); color: #b47aff; border: 1px solid rgba(180,120,255,0.25); }
+  .badge-info { background: rgba(120,140,160,0.12); color: #889ab0; border: 1px solid rgba(120,140,160,0.25); }
+
+  .std-title-block { flex: 1 }
+  .std-ref {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--text-bright);
+    font-weight: 600;
+  }
+  .std-name {
+    font-size: 13px;
+    color: var(--text);
+    margin-top: 2px;
+    font-style: italic;
+  }
+  .std-card-toggle {
+    font-size: 16px;
+    color: var(--text-dim);
+    transition: transform 0.2s;
+    margin-top: 2px;
+  }
+  .std-card.open .std-card-toggle { transform: rotate(180deg); }
+
+  .std-card-body {
+    display: none;
+    padding: 0 20px 18px;
+    border-top: 1px solid var(--border);
+  }
+  .std-card.open .std-card-body { display: block; }
+
+  .std-meta {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 12px;
+    padding-top: 14px;
+  }
+  .std-meta-item { font-size: 12px; }
+  .std-meta-item .label { color: var(--text-dim); margin-right: 4px; }
+  .std-meta-item .val { color: var(--text-bright); font-family: 'IBM Plex Mono', monospace; }
+
+  .std-desc { font-size: 13px; color: var(--text); line-height: 1.6; margin-bottom: 12px; }
+
+  .key-points {
+    background: var(--surface2);
+    border-radius: 4px;
+    padding: 12px 14px;
+    margin-top: 10px;
+  }
+  .key-points-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    color: var(--text-dim);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .key-points ul { list-style: none; }
+  .key-points li {
+    font-size: 12.5px;
+    color: var(--text);
+    padding: 3px 0;
+    display: flex;
+    gap: 8px;
+  }
+  .key-points li::before { content: '→'; color: var(--text-dim); flex-shrink: 0; }
+
+  /* Hierarchy diagram */
+  .hierarchy {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 28px 32px;
+    margin-bottom: 24px;
+    overflow-x: auto;
+  }
+  .hier-root {
+    text-align: center;
+    margin-bottom: 24px;
+  }
+  .hier-node {
+    display: inline-block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    padding: 6px 14px;
+    border-radius: 4px;
+    font-weight: 600;
+  }
+  .hier-root-node {
+    background: rgba(232,160,32,0.15);
+    border: 1.5px solid var(--accent);
+    color: var(--accent);
+    font-size: 13px;
+    padding: 8px 20px;
+  }
+  .hier-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+  }
+  .hier-col { }
+  .hier-col-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin-bottom: 8px;
+    text-align: center;
+  }
+  .hier-node-sm {
+    display: block;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    padding: 5px 10px;
+    border-radius: 3px;
+    margin-bottom: 5px;
+    text-align: center;
+  }
+  .hier-conn {
+    text-align: center;
+    color: var(--text-dim);
+    font-size: 20px;
+    margin-bottom: 16px;
+  }
+
+  /* Info boxes */
+  .info-box {
+    border-radius: 5px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+    font-size: 13px;
+  }
+  .info-box.warn {
+    background: rgba(232,160,32,0.08);
+    border: 1px solid rgba(232,160,32,0.25);
+    color: var(--text);
+  }
+  .info-box.note {
+    background: rgba(74,143,212,0.08);
+    border: 1px solid rgba(74,143,212,0.2);
+    color: var(--text);
+  }
+  .info-box .box-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+  .warn .box-label { color: var(--accent); }
+  .note .box-label { color: var(--accent2); }
+
+  /* Reference grid */
+  .ref-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 10px;
+  }
+  .ref-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 10px 12px;
+  }
+  .ref-item .ref-id {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    color: var(--text-bright);
+    margin-bottom: 3px;
+  }
+  .ref-item .ref-desc { font-size: 11.5px; color: var(--text-dim); }
+
+  /* Classification table */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+    margin-top: 12px;
+  }
+  th {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid rgba(42,48,69,0.5);
+    color: var(--text);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--text-bright); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 5px; height: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  @media (max-width: 768px) {
+    aside { display: none; }
+    main { padding: 24px 20px; }
+    header { padding: 20px; }
+    .ref-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-left">
+    <div class="header-tag">Technical Standards Reference</div>
+    <h1>Crane Design Standards — <span>Deep Dive</span></h1>
+  </div>
+  <div class="header-right">
+    Root: EN 15011:2020<br>
+    Scope: Bridge &amp; Gantry Cranes<br>
+    Framework: EU Machinery Directive 2006/42/EC
+  </div>
+</header>
+
+<div class="layout">
+  <aside>
+    <div class="nav-section-label">Overview</div>
+    <a href="#overview" class="active"><span class="dot" style="background:#e8a020"></span>Introduction</a>
+    <a href="#hierarchy"><span class="dot" style="background:#e8a020"></span>Standards Map</a>
+
+    <div class="nav-section-label">Root Standard</div>
+    <a href="#en15011"><span class="dot" style="background:#4a8fd4"></span>EN 15011:2020</a>
+
+    <div class="nav-section-label">General Design (EN 13001)</div>
+    <a href="#en13001-1"><span class="dot" style="background:#5cbc80"></span>13001-1 Principles</a>
+    <a href="#en13001-2"><span class="dot" style="background:#5cbc80"></span>13001-2 Loads</a>
+    <a href="#en13001-3-1"><span class="dot" style="background:#5cbc80"></span>13001-3-1 Steel</a>
+    <a href="#en13001-3-2"><span class="dot" style="background:#5cbc80"></span>13001-3-2 Wire Ropes</a>
+    <a href="#en13001-3-3"><span class="dot" style="background:#5cbc80"></span>13001-3-3 Wheel/Rail</a>
+    <a href="#en13001-3-4-5-6"><span class="dot" style="background:#5cbc80"></span>13001-3-4/5/6</a>
+
+    <div class="nav-section-label">Equipment &amp; Mechanisms</div>
+    <a href="#en13135"><span class="dot" style="background:#e8a020"></span>EN 13135 Equipment</a>
+    <a href="#en14492-2"><span class="dot" style="background:#e8a020"></span>EN 14492-2 Hoists</a>
+
+    <div class="nav-section-label">Operator Interface</div>
+    <a href="#en13557"><span class="dot" style="background:#d45a4a"></span>EN 13557 Controls</a>
+    <a href="#en12077"><span class="dot" style="background:#d45a4a"></span>EN 12077-2 Limiters</a>
+    <a href="#en13586"><span class="dot" style="background:#d45a4a"></span>EN 13586 Access</a>
+
+    <div class="nav-section-label">Electrical</div>
+    <a href="#en60204"><span class="dot" style="background:#b47aff"></span>EN 60204-32/11</a>
+    <a href="#en13849"><span class="dot" style="background:#b47aff"></span>EN ISO 13849-1</a>
+
+    <div class="nav-section-label">Information &amp; Use</div>
+    <a href="#en12644"><span class="dot" style="background:#889ab0"></span>EN 12644 Instructions</a>
+    <a href="#en13155"><span class="dot" style="background:#889ab0"></span>EN 13155 Attachments</a>
+
+    <div class="nav-section-label">Related</div>
+    <a href="#related"><span class="dot" style="background:#889ab0"></span>Adjacent Standards</a>
+    <a href="#directive"><span class="dot" style="background:#889ab0"></span>EU Directive Context</a>
+  </aside>
+
+  <main>
+
+    <!-- OVERVIEW -->
+    <section id="overview">
+      <div class="section-header">
+        <span class="section-num">00</span>
+        <h2>Introduction & Framework</h2>
+      </div>
+      <p>European crane design standards operate as a hierarchical, interlocking system under the umbrella of the EU Machinery Directive 2006/42/EC. At the top sits <strong>EN 15011:2020</strong> for bridge and gantry cranes — a Type C (product-specific) standard that directly references a web of underlying Type A and Type B standards covering structural design, load analysis, mechanical and electrical equipment, controls, access, and information.</p>
+      <p>Compliance with this standard suite is the primary route to CE marking for overhead cranes placed on the EU/UK market. The standards are maintained by CEN Technical Committee TC 147 (Cranes — Safety).</p>
+
+      <div class="info-box note">
+        <div class="box-label">Machinery Standards Hierarchy</div>
+        <strong>Type A</strong> — Basic safety concepts (e.g. EN ISO 12100 Risk Assessment)<br>
+        <strong>Type B</strong> — Generic safety topics (e.g. EN 13001 General Design, EN ISO 13849-1 Control Systems)<br>
+        <strong>Type C</strong> — Specific machine types (e.g. EN 15011 Bridge Cranes — takes precedence where it conflicts with Type A/B)
+      </div>
+
+      <div class="info-box warn">
+        <div class="box-label">Post-2020 Updates</div>
+        Several referenced standards have been updated since EN 15011:2020 was published. Notably: EN 13001-3-1 was reissued in 2025; EN 13001-2 was revised in 2021; EN 13001-3-5 has a 2025 edition; and EN 13557 was fully revised in 2024. Always verify current editions for active projects.
+      </div>
+    </section>
+
+    <!-- HIERARCHY MAP -->
+    <section id="hierarchy">
+      <div class="section-header">
+        <span class="section-num">01</span>
+        <h2>Standards Map</h2>
+      </div>
+      <div class="hierarchy">
+        <div class="hier-root">
+          <span class="hier-node hier-root-node">EN 15011:2020 — Bridge &amp; Gantry Cranes (Type C)</span>
+        </div>
+        <div class="hier-conn">↓ normatively references ↓</div>
+        <div class="hier-grid">
+          <div class="hier-col">
+            <div class="hier-col-label" style="color:#5cbc80">General Design</div>
+            <span class="hier-node-sm" style="background:rgba(92,188,128,0.1);border:1px solid rgba(92,188,128,0.25);color:#5cbc80">EN 13001-1</span>
+            <span class="hier-node-sm" style="background:rgba(92,188,128,0.1);border:1px solid rgba(92,188,128,0.25);color:#5cbc80">EN 13001-2</span>
+            <span class="hier-node-sm" style="background:rgba(92,188,128,0.1);border:1px solid rgba(92,188,128,0.25);color:#5cbc80">EN 13001-3-1</span>
+            <span class="hier-node-sm" style="background:rgba(92,188,128,0.1);border:1px solid rgba(92,188,128,0.25);color:#5cbc80">EN 13001-3-2</span>
+            <span class="hier-node-sm" style="background:rgba(92,188,128,0.1);border:1px solid rgba(92,188,128,0.25);color:#5cbc80">EN 13001-3-3</span>
+            <span class="hier-node-sm" style="background:rgba(92,188,128,0.1);border:1px solid rgba(92,188,128,0.25);color:#5cbc80">EN 13001-3-4/5/6</span>
+          </div>
+          <div class="hier-col">
+            <div class="hier-col-label" style="color:#e8a020">Equipment</div>
+            <span class="hier-node-sm" style="background:rgba(232,160,32,0.1);border:1px solid rgba(232,160,32,0.25);color:#e8a020">EN 13135</span>
+            <span class="hier-node-sm" style="background:rgba(232,160,32,0.1);border:1px solid rgba(232,160,32,0.25);color:#e8a020">EN 14492-2</span>
+            <span class="hier-node-sm" style="background:rgba(232,160,32,0.1);border:1px solid rgba(232,160,32,0.25);color:#e8a020">EN 13155</span>
+            <span class="hier-node-sm" style="background:rgba(232,160,32,0.1);border:1px solid rgba(232,160,32,0.25);color:#e8a020">EN 13157</span>
+          </div>
+          <div class="hier-col">
+            <div class="hier-col-label" style="color:#d45a4a">Operator Interface</div>
+            <span class="hier-node-sm" style="background:rgba(212,90,74,0.1);border:1px solid rgba(212,90,74,0.25);color:#d45a4a">EN 13557</span>
+            <span class="hier-node-sm" style="background:rgba(212,90,74,0.1);border:1px solid rgba(212,90,74,0.25);color:#d45a4a">EN 12077-2</span>
+            <span class="hier-node-sm" style="background:rgba(212,90,74,0.1);border:1px solid rgba(212,90,74,0.25);color:#d45a4a">EN 13586</span>
+          </div>
+          <div class="hier-col">
+            <div class="hier-col-label" style="color:#b47aff">Electrical / Control</div>
+            <span class="hier-node-sm" style="background:rgba(180,120,255,0.1);border:1px solid rgba(180,120,255,0.25);color:#b47aff">EN 60204-32</span>
+            <span class="hier-node-sm" style="background:rgba(180,120,255,0.1);border:1px solid rgba(180,120,255,0.25);color:#b47aff">EN IEC 60204-11</span>
+            <span class="hier-node-sm" style="background:rgba(180,120,255,0.1);border:1px solid rgba(180,120,255,0.25);color:#b47aff">EN ISO 13849-1</span>
+          </div>
+          <div class="hier-col">
+            <div class="hier-col-label" style="color:#889ab0">Information</div>
+            <span class="hier-node-sm" style="background:rgba(120,140,160,0.1);border:1px solid rgba(120,140,160,0.25);color:#889ab0">EN 12644-1</span>
+            <span class="hier-node-sm" style="background:rgba(120,140,160,0.1);border:1px solid rgba(120,140,160,0.25);color:#889ab0">EN 12644-2</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EN 15011 -->
+    <section id="en15011">
+      <div class="section-header">
+        <span class="section-num">02</span>
+        <h2>EN 15011:2020 — Root Standard</h2>
+      </div>
+      <div class="std-card open">
+        <div class="std-card-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="std-badge badge-core">TYPE C</span>
+          <div class="std-title-block">
+            <div class="std-ref">EN 15011:2020</div>
+            <div class="std-name">Cranes — Bridge and Gantry Cranes</div>
+          </div>
+          <div class="std-card-toggle">▾</div>
+        </div>
+        <div class="std-card-body">
+          <div class="std-meta">
+            <div class="std-meta-item"><span class="label">Published:</span><span class="val">December 2020</span></div>
+            <div class="std-meta-item"><span class="label">Supersedes:</span><span class="val">EN 15011:2011+A1:2014</span></div>
+            <div class="std-meta-item"><span class="label">Directive:</span><span class="val">2006/42/EC (Machinery)</span></div>
+            <div class="std-meta-item"><span class="label">Pages:</span><span class="val">~98</span></div>
+          </div>
+          <p class="std-desc">The root Type C product standard for bridge cranes (including overhead travelling cranes) and gantry cranes. Applies to cranes travelling on rails, runways or roadway surfaces, and stationary-position gantry cranes without wheels. Does <em>not</em> apply to light crane systems (see EN 16851) or to lifting of persons.</p>
+          <div class="key-points">
+            <div class="key-points-label">Key Clauses &amp; Content</div>
+            <ul>
+              <li>Clause 4: List of significant hazards (mechanical, electrical, thermal, noise, ergonomic, etc.)</li>
+              <li>Clause 5: Safety requirements & protective measures — the core technical prescriptions</li>
+              <li>Clause 5.2: Structural requirements — references EN 13001 series for load/structural design</li>
+              <li>Clause 5.3: Hoist brake must provide ≥160% of maximum load torque; conforms to EN 13135</li>
+              <li>Clause 5.4: Hoisting equipment — EN 14492-2 hoists treated as pre-qualified components</li>
+              <li>Clause 6: Verification requirements — testing, inspection, and calculations to be documented</li>
+              <li>Clause 7: Information for use — instruction manuals, marking, rated capacity</li>
+              <li>Annex A/B: Guidance for specifying operating duty per EN 13001-1 classification system</li>
+              <li>Annex D: Loads caused by skewing (changed from normative to informative in 2020 edition)</li>
+              <li>Annex F (normative): Noise test code</li>
+              <li>Annex G: Actions on crane supporting structures — loads transferred to building structure</li>
+              <li>Annex ZA: Mapping to essential health &amp; safety requirements of 2006/42/EC</li>
+            </ul>
+          </div>
+          <div class="key-points" style="margin-top:10px">
+            <div class="key-points-label">Key changes from 2011+A1:2014</div>
+            <ul>
+              <li>Updates to clauses 5.1, 5.2.1.3.2, 5.2.1.5, 5.2.2.2, and 6.3.2</li>
+              <li>Annex D on skewing loads changed from normative to informative</li>
+              <li>Control system safety now requires minimum Performance Level c per EN ISO 13849-1</li>
+              <li>Electronic/programmable control circuits must meet PLc Category 2 (elevated from previous)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EN 13001 SERIES -->
+    <section id="en13001-1">
+      <div class="section-header">
+        <span class="section-num">03</span>
+        <h2>EN 13001 — General Design Series</h2>
+      </div>
+      <p style="margin-bottom:16px">The EN 13001 series forms the backbone of crane mechanical design. Parts 1 and 2 establish classification and loads; the Part 3 sub-series addresses limit states for individual structural components. These are Type B standards applicable to all crane types, called up by EN 15011 for all structural and mechanical verification.</p>
+
+      <div class="std-card open" id="en13001-1-card">
+        <div class="std-card-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="std-badge badge-structural">STRUCTURAL</span>
+          <div class="std-title-block">
+            <div class="std-ref">EN 13001-1:2015</div>
+            <div class="std-name">General Design — Part 1: General Principles and Requirements</div>
+          </div>
+          <div class="std-card-toggle">▾</div>
+        </div>
+        <div class="std-card-body">
+          <div class="std-meta">
+            <div class="std-meta-item"><span class="label">Status:</span><span class="val">Current</span></div>
+            <div class="std-meta-item"><span class="label">Type:</span><span class="val">B</span></div>
+          </div>
+          <p class="std-desc">Establishes the overarching principles and terminology for crane design. Defines the classification system for cranes and their components, underpinning all subsequent EN 13001 calculations. Must be used in conjunction with Part 2 (loads) and the Part 3 sub-series.</p>
+          <div class="key-points">
+            <div class="key-points-label">Scope</div>
+            <ul>
+              <li>Defines load classes, use classes, and the combined classification system (A–U groups) for crane components</li>
+              <li>Specifies the proof-of-competence approach: design must demonstrate that load effects stay within limit states with required safety margins</li>
+              <li>Covers hazards: instability (tilting), exceeding strength limits (yield, ultimate, fatigue), elastic instability (buckling), temperature limits</li>
+              <li>Provides reference classification table used by EN 15011 annexes to specify operating duty</li>
+              <li>Allows advanced theoretical or experimental methods as alternatives, provided they conform to the standard's principles</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="std-card" id="en13001-2">
+        <div class="std-card-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="std-badge badge-structural">STRUCTURAL</span>
+          <div class="std-title-block">
+            <div class="std-ref">EN 13001-2:2014 (rev. 2021)</div>
+            <div class="std-name">General Design — Part 2: Load Actions</div>
+          </div>
+          <div class="std-card-toggle">▾</div>
+        </div>
+        <div class="std-card-body">
+          <div class="std-meta">
+            <div class="std-meta-item"><span class="label">Note:</span><span class="val">Revised to EN 13001-2:2021</span></div>
+            <div class="std-meta-item"><span class="label">Referenced by EN 15011 as:</span><span class="val">2014 edition</span></div>
+          </div>
+          <p class="std-desc">Specifies all load actions and load combinations to be used in crane structural calculations. Defines dynamic factors (ϕ₁–ϕ₇), test loads, and environmental loads. Forms the input to all Part 3 limit-state checks.</p>
+          <div class="key-points">
+            <div class="key-points-label">Key Load Categories</div>
+            <ul>
+              <li><strong>Regular loads:</strong> self-weight, hoist loads, inertia forces from acceleration/deceleration, skewing forces, tilting forces</li>
+              <li><strong>Occasional loads:</strong> wind loads (in service &amp; out of service), snow/ice, temperature effects, dynamic test loads</li>
+              <li><strong>Exceptional loads:</strong> buffer forces, tilting test loads, emergency cut-out loads, failure of hoist mechanism</li>
+              <li>Dynamic factor ϕ₂ for hoisting (EN 15011 Annex C provides an alternative calculation method)</li>
+              <li>Load combinations A, B, C defined for use in limit-state proofs — each driving different design cases</li>
+              <li>Addresses risks: rigid body instability, strength limit exceedance, elastic instability</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="std-card" id="en13001-3-1">
+        <div class="std-card-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="std-badge badge-structural">STRUCTURAL</span>
+          <div class="std-title-block">
+            <div class="std-ref">EN 13001-3-1:2025</div>
+            <div class="std-name">General Design — Part 3-1: Limit States &amp; Proof of Competence of Steel Structures</div>
+          </div>
+          <div class="std-card-toggle">▾</div>
+        </div>
+        <div class="std-card-body">
+          <div class="std-meta">
+            <div class="std-meta-item"><span class="label">Current edition:</span><span class="val">2025 (March)</span></div>
+            <div class="std-meta-item"><span class="label">Previously:</span><span class="val">2012+A2:2018</span></div>
+          </div>
+          <p class="std-desc">The primary standard for verifying the structural steelwork of crane girders, end carriages, and other load-bearing members. Applies limit-state design methodology consistent with Eurocode philosophy. References numerous EN 10025-series steel product standards and EN 10149 for high-strength steels.</p>
+          <div class="key-points">
+            <div class="key-points-label">Content</div>
+            <ul>
+              <li>Yield limit state: verifies stresses remain below material yield with partial safety factors</li>
+              <li>Fracture limit state: brittle fracture risk using Charpy impact energy requirements by temperature class</li>
+              <li>Fatigue limit state: S-N curve approach using classified structural details; number of load cycles from EN 13001-1 classification</li>
+              <li>Buckling (elastic instability): plate buckling, member buckling, lateral torsional buckling</li>
+              <li>Elastic deformation limit: deflection limits to prevent interference and ensure operational safety</li>
+              <li>Welded connections: weld throat sizing, partial penetration rules, weld quality class requirements</li>
+              <li>References EN 10025 structural steel grades, EN 10149 high-yield steels, and stainless steel EN 10088 series</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="std-card" id="en13001-3-2">
+        <div class="std-card-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="std-badge badge-structural">STRUCTURAL</span>
+          <div class="std-title-block">
+            <div class="std-ref">EN 13001-3-2:2014</div>
+            <div class="std-name">General Design — Part 3-2: Limit States — Wire Ropes in Reeving Systems</div>
+          </div>
+          <div class="std-card-toggle">▾</div>
+        </div>
+        <div class="std-card-body">
+          <p class="std-desc">Governs the selection, sizing, and proof-of-competence of wire ropes in crane hoist reeving systems. Works in conjunction with EN 12385 (wire rope product standards) and ISO 4309 for in-service inspection.</p>
+          <div class="key-points">
+            <div class="key-points-label">Content</div>
+            <ul>
+              <li>Minimum rope diameter selection based on Zp factor (rope utilisation factor), load, and classification</li>
+              <li>Sheave and drum diameter-to-rope diameter ratios (D/d) for different classification groups</li>
+              <li>Multi-layer drum winding requirements</li>
+              <li>References EN 12385-2 (definitions), EN 12385-4 (stranded ropes for lifting)</li>
+              <li>References EN 13411-series for rope terminations (ferrules, socketing, wedge sockets)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="std-card" id="en13001-3-3">
+        <div class="std-card-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="std-badge badge-structural">STRUCTURAL</span>
+          <div class="std-title-block">
+            <div class="std-ref">EN 13001-3-3:2014</div>
+            <div class="std-name">General Design — Part 3-3: Limit States — Wheel/Rail Contacts</div>
+          </div>
+          <div class="std-card-toggle">▾</div>
+        </div>
+        <div class="std-card-body">
+          <p class="std-desc">Addresses the Hertzian contact stresses between crane travel wheels and their rails. Applicable to metallic wheel/rail contacts only (steel and cast iron wheels). Roller bearings are excluded — covered in Part 3-4.</p>
+          <div class="key-points">
+            <div class="key-points-label">Content</div>
+            <ul>
+              <li>Contact pressure limit states for wheel/rail interfaces under static and fatigue loading</li>
+              <li>Wheel load distribution, flange guidance forces</li>
+              <li>Wear considerations and minimum rail head hardness relative to wheel hardness</li>
+              <li>Both cylindrical and profiled (worn-profile) wheel geometries addressed</li>
+              <li>Fatigue life calculation for wheel rolling contact</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="std-card" id="en13001-3-4-5-6">
+        <div class="std-card-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="std-badge badge-structural">STRUCTURAL</span>
+          <div class="std-title-block">
+            <div class="std-ref">EN 13001-3-4 / 3-5 / 3-6</div>
+            <div class="std-name">Limit States — Bearings / Hooks / Hydraulic Cylinders</div>
+          </div>
+          <div class="std-card-toggle">▾</div>
+        </div>
+        <div class="std-card-body">
+          <div class="key-points">
+            <div class="key-points-label">EN 13001-3-4:2018 — Bearings</div>
+            <ul>
+              <li>Proof of competence for rolling element bearings in crane mechanisms</li>
+              <li>Dynamic and static load ratings, service life calculation, speed and temperature limits</li>
+              <li>Consistent with ISO 281 bearing life methodology, adapted for crane classification</li>
+            </ul>
+          </div>
+          <div class="key-points" style="margin-top:10px">
+            <div class="key-points-label">EN 13001-3-5:2016 (rev. 2025) — Forged &amp; Cast Hooks</div>
+            <ul>
+              <li>Yield, fracture, and fatigue limit states for single and double hooks</li>
+              <li>Material requirements: EN 10250 forgings, EN 10213/10340 castings</li>
+              <li>Mandatory Charpy impact testing and proof load test requirements</li>
+              <li>2025 revision updated to reference EN 13001-2:2021</li>
+            </ul>
+          </div>
+          <div class="key-points" style="margin-top:10px">
+            <div class="key-points-label">EN 13001-3-6:2018 — Hydraulic Cylinders</div>
+            <ul>
+              <li>Structural verification of hydraulic cylinders used in crane mechanisms (e.g. variable outreach, luffing)</li>
+              <li>Pressure containment, buckling of piston rod, fatigue of seals and cylinder body</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EN 13135 -->
+    <section id="en13135">
+      <div class="section-header">
+        <span class="section-num">04</span>
+        <h2>EN 13135 — Equipment Requirements</h2>
+      </div>
+      <div class="std-card open">
+        <div class="std-card-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="std-badge badge-equipment">EQUIPMENT</span>
+          <div class="std-title-block">
+            <div class="std-ref">EN 13135:2013+A1:2018</div>
+            <div class="std-name">Cranes — Safety — Design — Requirements for Equipment</div>
+          </div>
+          <div class="std-card-toggle">▾</div>
+        </div>
+        <div class="std-card-body">
+          <div class="std-meta">
+            <div class="std-meta-item"><span class="label">Supersedes:</span><span class="val">EN 13135-1 (electrical) + EN 13135-2 (non-electrical)</span></div>
+            <div class="std-meta-item"><span class="label">Amendment:</span><span class="val">A1:2018</span></div>
+          </div>
+          <p class="std-desc">Consolidated standard specifying design and selection requirements for all categories of equipment used in cranes — electrical, mechanical, hydraulic, and pneumatic. Applies to all crane types. EN 15011 requires specific compliance for hoist brakes, high-risk applications (e.g. molten metal handling), and variable rated capacity selectors.</p>
+          <div class="key-points">
+            <div class="key-points-label">Key Areas Covered</div>
+            <ul>
+              <li><strong>Electrical equipment:</strong> motor selection (duty cycles, thermal class), switchgear, contactors, transformers, cabling and busbar systems</li>
+              <li><strong>Brakes:</strong> design requirements for holding, travel, and emergency brakes; minimum torque margins; fail-safe principle (spring-applied)</li>
+              <li><strong>Mechanisms:</strong> gearboxes, couplings, shafting — selection and sizing criteria</li>
+              <li><strong>Hydraulic systems:</strong> pump sizing, valve requirements, hose and pipe specifications, pressure relief</li>
+              <li><strong>Pneumatic systems:</strong> compressor sizing, filter/dryer requirements, actuator selection</li>
+              <li><strong>High-risk applications:</strong> defines enhanced requirements for cranes handling molten metal, foundry operations, and similar elevated-hazard environments</li>
+              <li><strong>Control system performance:</strong> used alongside EN ISO 13849-1 to determine required safety levels</li>
+              <li>References EN 12077-2 for limiting and indicating devices; EN 60204-32 for electrical systems</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EN 14492-2 -->
+    <section id="en14492-2">
+      <div class="section-header">
+        <span class="section-num">05</span>
+        <h2>EN 14492-2 — Power Driven Hoists</h2>
+      </div>
+      <div class="std-card open">
+        <div class="std-card-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="std-badge badge-equipment">EQUIPMENT</span>
+          <div class="std-title-block">
+            <div class="std-ref">EN 14492-2:2019</div>
+            <div class="std-name">Cranes — Power Driven Winches and Hoists — Part 2: Power Driven Hoists</div>
+          </div>
+          <div class="std-card-toggle">▾</div>
+        </div>
+        <div class="std-card-body">
+          <div class="std-meta">
+            <div class="std-meta-item"><span class="label">Status:</span><span class="val">Current (Under Review)</span></div>
+            <div class="std-meta-item"><span class="label">Prime movers:</span><span class="val">Electric, Hydraulic, Pneumatic</span></div>
+          </div>
+          <p class="std-desc">Governs the design, testing, and information-for-use of power-driven hoists used as components within cranes or independently. When a hoist conforming to EN 14492-2 is incorporated into a bridge crane under EN 15011, the crane standard's structural requirements do not re-apply to the hoist unit itself — it is selected on the basis of matching EN 13001-1 classification principles.</p>
+          <div class="key-points">
+            <div class="key-points-label">Hoist Types Covered</div>
+            <ul>
+              <li>Rope hoists (wire rope reeving systems)</li>
+              <li>Chain hoists (roller chain or load chain)</li>
+              <li>Belt hoists (excluding steel belt types)</li>
+              <li>NGL building hoists with supporting structures</li>
+              <li>Winches used for lifting operations</li>
+            </ul>
+          </div>
+          <div class="key-points" style="margin-top:10px">
+            <div class="key-points-label">Key Design Requirements</div>
+            <ul>
+              <li>Classification of hoist in accordance with EN 13001-1 duty groups</li>
+              <li>Static proof load test: typically 125% of rated load</li>
+              <li>Dynamic test: 110% of rated load through full travel</li>
+              <li>Lower hook limit switch and upper hook limit switch (independent of main control)</li>
+              <li>Load limiting device requirements</li>
+              <li>References EN 13001-3-2 for rope sizing, EN 13001-3-5 for hook design, EN 13411-series for rope terminations</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EN 13557 -->
+    <section id="en13557">
+      <div class="section-header">
+        <span class="section-num">06</span>
+        <h2>EN 13557 — Controls and Control Stations</h2>
+      </div>
+      <div class="std-card open">
+        <div class="std-card-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="std-badge badge-equipment">EQUIPMENT</span>
+          <div class="std-title-block">
+            <div class="std-ref">EN 13557:2003+A2:2008 (now EN 13557:2024)</div>
+            <div class="std-name">Cranes — Control Devices and Control Stations</div>
+          </div>
+          <div class="std-card-toggle">▾</div>
+        </div>
+        <div class="std-card-body">
+          <div class="std-meta">
+            <div class="std-meta-item"><span class="label">Referenced by EN 15011 as:</span><span class="val">2003+A2:2008</span></div>
+            <div class="std-meta-item"><span class="label">Current edition:</span><span class="val">EN 13557:2024 (fully revised)</span></div>
+          </div>
+          <p class="std-desc">Specifies ergonomic and safety design requirements for control devices and operator stations on all crane types. The 2024 edition is substantially expanded to address modern control technologies including touchscreens, joystick systems, and cableless (radio/infrared) remote control.</p>
+          <div class="key-points">
+            <div class="key-points-label">Key Requirements</div>
+            <ul>
+              <li>Layout and positioning of control levers, switches, joysticks, and pedals relative to the operator</li>
+              <li>Motion direction conventions (interlocked with EN 15011 safe-movement rules)</li>
+              <li>Emergency stop requirements: location, accessibility, and function per EN 60204-32</li>
+              <li>Cableless control systems (Annex C in older edition): automatic stop on signal loss, unique identifiers to prevent cross-interference between adjacent cranes</li>
+              <li>Cabin ergonomics: sightlines, seat adjustability, vibration limits, illumination (minimum 50 lux at controls; 200 lux for maintenance)</li>
+              <li>2024 revision: adds requirements for touchscreen interfaces, updated cableless requirements, improved accessibility guidance</li>
+              <li>Control systems (circuits, PLCs) are governed by EN 60204-32 and EN 13135, not this standard</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EN 12077-2 -->
+    <section id="en12077">
+      <div class="section-header">
+        <span class="section-num">07</span>
+        <h2>EN 12077-2 — Limiting and Indicating Devices</h2>
+      </div>
+      <div class="std-card open">
+        <div class="std-card-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="std-badge badge-safety">SAFETY</span>
+          <div class="std-title-block">
+            <div class="std-ref">EN 12077-2:1998+A1:2008</div>
+            <div class="std-name">Cranes Safety — Requirements for Health and Safety — Part 2: Limiting and Indicating Devices</div>
+          </div>
+          <div class="std-card-toggle">▾</div>
+        </div>
+        <div class="std-card-body">
+          <p class="std-desc">Defines design requirements for the safety-critical limiting devices that prevent overload and out-of-bounds operations, and for indicator/display systems that inform the operator of crane status. Directly linked to the crane's protective function under the Machinery Directive.</p>
+          <div class="key-points">
+            <div class="key-points-label">Limiting Devices Covered</div>
+            <ul>
+              <li>Load limiters (overload cut-off): accuracy requirements, test procedures</li>
+              <li>Upper and lower hook limit switches (travel limits in hoisting direction)</li>
+              <li>Travel limit switches for bridge and crab travel axes</li>
+              <li>Rated capacity limiter (RCL): mandatory for cranes above certain capacities or with variable capacity</li>
+              <li>Anti-collision devices: where required by application</li>
+              <li>Cableless control: cut-off on signal loss (referenced also in EN 13557)</li>
+            </ul>
+          </div>
+          <div class="key-points" style="margin-top:10px">
+            <div class="key-points-label">Indicating Devices</div>
+            <ul>
+              <li>Safe working load (SWL) display visible to operator</li>
+              <li>Load display / load moment indicator for variable-capacity cranes</li>
+              <li>Visual warning for cableless control engagement</li>
+              <li>Anemometer display where required (exposed sites)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EN 13586 -->
+    <section id="en13586">
+      <div class="section-header">
+        <span class="section-num">08</span>
+        <h2>EN 13586 — Access</h2>
+      </div>
+      <div class="std-card open">
+        <div class="std-card-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="std-badge badge-safety">SAFETY</span>
+          <div class="std-title-block">
+            <div class="std-ref">EN 13586:2004+A1:2008 (updated 2020)</div>
+            <div class="std-name">Cranes — Access</div>
+          </div>
+          <div class="std-card-toggle">▾</div>
+        </div>
+        <div class="std-card-body">
+          <p class="std-desc">Specifies dimensional and constructional requirements for all access means on cranes — walkways, platforms, stairs, ladders, and handrail systems. Ensures that maintenance and inspection personnel can safely reach all areas requiring periodic attention.</p>
+          <div class="key-points">
+            <div class="key-points-label">Coverage</div>
+            <ul>
+              <li>Walkway dimensions: minimum clear width, slip-resistant surface requirements (abrasive coatings, gratings)</li>
+              <li>Handrail and toe-board heights and load capacity</li>
+              <li>Fixed ladders: rung spacing, maximum height without rest platforms, fall-arrest requirements</li>
+              <li>Alternating-tread stairs and ship's ladders: angle and geometry requirements</li>
+              <li>Access to electrical cabinets, machinery rooms, and trolley maintenance positions</li>
+              <li>Side-protection (guardrail) classification: Type 1 (walkway), Type 2, Type 3 by risk level</li>
+              <li>Anti-fall provisions: safety cables, horizontal lifelines, fall arrest anchor points</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ELECTRICAL -->
+    <section id="en60204">
+      <div class="section-header">
+        <span class="section-num">09</span>
+        <h2>Electrical Standards — EN 60204 Series</h2>
+      </div>
+      <div class="std-card open">
+        <div class="std-card-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="std-badge badge-electrical">ELECTRICAL</span>
+          <div class="std-title-block">
+            <div class="std-ref">EN 60204-32:2008</div>
+            <div class="std-name">Safety of Machinery — Electrical Equipment of Machines — Part 32: Requirements for Hoisting Machines</div>
+          </div>
+          <div class="std-card-toggle">▾</div>
+        </div>
+        <div class="std-card-body">
+          <p class="std-desc">The primary electrical standard for crane and hoist machinery, extending the general machinery electrical standard IEC 60204-1 with crane-specific requirements. Covers the complete electrical system from supply intake to final drive and control outputs.</p>
+          <div class="key-points">
+            <div class="key-points-label">Key Requirements</div>
+            <ul>
+              <li>Incoming supply: isolators, fuses, protection coordination</li>
+              <li>Motor circuit design: contactor ratings, overload protection, thermistors</li>
+              <li>Braking systems: electrical braking (dynamic, regenerative), interlocking with mechanical brakes</li>
+              <li>Variable frequency drives (VFDs): safe torque off (STO) function, encoder feedback requirements</li>
+              <li>Emergency stop categories (0, 1, 2) and their implementation in crane circuits</li>
+              <li>Cableless (radio) control systems: frequency management, fail-safe stop on signal loss, selector switch for enabling cableless mode</li>
+              <li>Collector systems: conductor bars, festoon cables, cable reels — IP ratings and clearances</li>
+              <li>Earthing, bonding, and insulation monitoring for high-availability systems</li>
+              <li>Panel layouts, cable segregation, enclosure protection ratings (IP classes)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+
+      <div class="std-card">
+        <div class="std-card-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="std-badge badge-electrical">ELECTRICAL</span>
+          <div class="std-title-block">
+            <div class="std-ref">EN IEC 60204-11:2019</div>
+            <div class="std-name">Safety of Machinery — Electrical Equipment — Part 11: HV Equipment (>1 kV AC or 1.5 kV DC, up to 36 kV)</div>
+          </div>
+          <div class="std-card-toggle">▾</div>
+        </div>
+        <div class="std-card-body">
+          <p class="std-desc">Applies to cranes in special applications where high-voltage supply or drives are used, such as very large port cranes or steel-mill overhead cranes with HV collector systems. Covers HV switchgear, transformers, and HV motor starters on the crane itself.</p>
+          <div class="key-points">
+            <div class="key-points-label">Applicability</div>
+            <ul>
+              <li>Relevant when crane supply voltage exceeds 1,000 V AC or 1,500 V DC</li>
+              <li>HV isolation procedures, interlock schemes, and earthing requirements</li>
+              <li>Typically applies to very large gantry cranes (ship-to-shore, heavy-lift) and specialist industrial overhead cranes</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EN ISO 13849 -->
+    <section id="en13849">
+      <div class="section-header">
+        <span class="section-num">10</span>
+        <h2>EN ISO 13849-1 — Safety-Related Control Systems</h2>
+      </div>
+      <div class="std-card open">
+        <div class="std-card-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="std-badge badge-electrical">CONTROL SAFETY</span>
+          <div class="std-title-block">
+            <div class="std-ref">EN ISO 13849-1:2015 (current: 2023)</div>
+            <div class="std-name">Safety of Machinery — Safety-Related Parts of Control Systems — Part 1: General Principles for Design</div>
+          </div>
+          <div class="std-card-toggle">▾</div>
+        </div>
+        <div class="std-card-body">
+          <div class="std-meta">
+            <div class="std-meta-item"><span class="label">EN 15011 requires:</span><span class="val">Minimum PLc, Cat. 1 (electromechanical) / Cat. 2 (electronic)</span></div>
+            <div class="std-meta-item"><span class="label">High-risk applications:</span><span class="val">Risk assessment to determine higher PL</span></div>
+            <div class="std-meta-item"><span class="label">2015→2023 transition:</span><span class="val">Until May 2027</span></div>
+          </div>
+          <p class="std-desc">Provides the framework for assessing the reliability and integrity of safety functions implemented in crane control systems. EN 15011 mandates that all safety-related control functions (as identified by EN 13135) achieve at minimum Performance Level c. For high-risk applications (e.g. molten metal) a risk assessment per EN 13135/EN 13001-2 is required to establish whether a higher PL is needed.</p>
+          <div class="key-points">
+            <div class="key-points-label">Performance Level Framework</div>
+            <ul>
+              <li><strong>PL a–e:</strong> five discrete reliability levels defined by probability of dangerous failure per hour (PFHd)</li>
+              <li><strong>Categories 1–4:</strong> structural architectures (single channel, dual channel, with/without diagnostics)</li>
+              <li><strong>PLc:</strong> required by EN 15011 for standard crane safety functions — achieved by Category 1 (electromechanical) or Category 2 (electronic) architecture</li>
+              <li>Parameters: MTTFd (mean time to dangerous failure), DC (diagnostic coverage), CCF (common cause failure)</li>
+              <li>2023 revision: updated PL determination graph, enhanced software guidance, EMC immunity requirements added</li>
+              <li>Compatible with IEC 62061 (SIL-based approach) — designers may use either standard</li>
+            </ul>
+          </div>
+
+          <table>
+            <thead>
+              <tr><th>Performance Level</th><th>PFHd range (per hour)</th><th>EN 15011 Application</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>PLa</td><td>≥10⁻⁵ to &lt;10⁻⁴</td><td>Not acceptable for safety functions</td></tr>
+              <tr><td>PLb</td><td>≥3×10⁻⁶ to &lt;10⁻⁵</td><td>Minor risk reduction only</td></tr>
+              <tr><td>PLc</td><td>≥10⁻⁶ to &lt;3×10⁻⁶</td><td><strong>Minimum required (EN 15011 §5.x)</strong></td></tr>
+              <tr><td>PLd</td><td>≥10⁻⁷ to &lt;10⁻⁶</td><td>High-risk applications (molten metal etc.)</td></tr>
+              <tr><td>PLe</td><td>≥10⁻⁸ to &lt;10⁻⁷</td><td>Highest risk — exceptional crane applications</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- EN 12644 -->
+    <section id="en12644">
+      <div class="section-header">
+        <span class="section-num">11</span>
+        <h2>EN 12644 — Information for Use</h2>
+      </div>
+      <div class="std-card open">
+        <div class="std-card-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="std-badge badge-info">INFORMATION</span>
+          <div class="std-title-block">
+            <div class="std-ref">EN 12644-1:2001+A1:2008 &amp; EN 12644-2:2000+A1:2008</div>
+            <div class="std-name">Cranes — Information for Use and Testing — Instructions / Marking</div>
+          </div>
+          <div class="std-card-toggle">▾</div>
+        </div>
+        <div class="std-card-body">
+          <p class="std-desc">Defines what information must accompany the crane. Part 1 covers the content and format of instruction manuals; Part 2 covers marking (rated capacity plates, warnings, identification).</p>
+          <div class="key-points">
+            <div class="key-points-label">Part 1 — Instructions Content</div>
+            <ul>
+              <li>Transport and installation instructions including permissible crane rail profiles</li>
+              <li>Commissioning procedure and functional tests</li>
+              <li>Operating instructions including load charts, prohibited uses, environmental limits</li>
+              <li>Maintenance schedule: inspection intervals, lubrication points, brake adjustment</li>
+              <li>Spare parts list and ordering information</li>
+              <li>Decommissioning instructions</li>
+            </ul>
+          </div>
+          <div class="key-points" style="margin-top:10px">
+            <div class="key-points-label">Part 2 — Marking Requirements</div>
+            <ul>
+              <li>Rated capacity (SWL) — minimum character size, position, durability</li>
+              <li>Manufacturer name and address</li>
+              <li>Year of manufacture and serial number</li>
+              <li>CE marking with notified body number (if applicable)</li>
+              <li>Maximum wheel loads and tie-down points</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EN 13155 -->
+    <section id="en13155">
+      <div class="section-header">
+        <span class="section-num">12</span>
+        <h2>EN 13155 — Non-Fixed Load Lifting Attachments</h2>
+      </div>
+      <div class="std-card open">
+        <div class="std-card-header" onclick="this.parentElement.classList.toggle('open')">
+          <span class="std-badge badge-equipment">EQUIPMENT</span>
+          <div class="std-title-block">
+            <div class="std-ref">EN 13155:2003+A2:2009</div>
+            <div class="std-name">Cranes — Safety — Non-Fixed Load Lifting Attachments</div>
+          </div>
+          <div class="std-card-toggle">▾</div>
+        </div>
+        <div class="std-card-body">
+          <p class="std-desc">Covers lifting attachments that are not permanently fixed to the crane — grabs, magnets, vacuum pads, spreader beams, and similar. These are treated as interchangeable equipment and must be certified independently, though the crane must be designed to accommodate them.</p>
+          <div class="key-points">
+            <div class="key-points-label">Types Covered</div>
+            <ul>
+              <li>Mechanical grabs (clamshell, orange peel, grapple types)</li>
+              <li>Electromagnetic lifting devices (permanent, electropermanent, and electromagnets)</li>
+              <li>Vacuum lifting devices (suction pads)</li>
+              <li>Lifting beams and spreader frames</li>
+              <li>C-hooks and coil grabs</li>
+            </ul>
+          </div>
+          <div class="key-points" style="margin-top:10px">
+            <div class="key-points-label">Key Requirements</div>
+            <ul>
+              <li>Static proof test at 1.5× SWL; dynamic test at 1.1× SWL</li>
+              <li>Redundant suspension requirements where loss of load would be catastrophic</li>
+              <li>For electromagnetic devices: backup retention requirements during power failure</li>
+              <li>Marking with SWL, geometry constraints, and attachment point identification</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- RELATED STANDARDS -->
+    <section id="related">
+      <div class="section-header">
+        <span class="section-num">13</span>
+        <h2>Adjacent &amp; Related Standards</h2>
+      </div>
+      <p style="margin-bottom:16px">The following standards are not directly referenced by EN 15011:2020 but are commonly needed in practice alongside the main suite.</p>
+
+      <div class="ref-grid">
+        <div class="ref-item">
+          <div class="ref-id">EN 16851:2017</div>
+          <div class="ref-desc">Light crane systems — wall-mounted, pillar, jib cranes, monorail hoists (the standard that EN 15011 explicitly excludes)</div>
+        </div>
+        <div class="ref-item">
+          <div class="ref-id">EN 12385-4:2002+A1:2008</div>
+          <div class="ref-desc">Steel wire ropes — Safety — Part 4: Stranded ropes for general lifting (product standard for ropes used per EN 13001-3-2)</div>
+        </div>
+        <div class="ref-item">
+          <div class="ref-id">ISO 4309:2017</div>
+          <div class="ref-desc">Wire ropes — Care and maintenance, inspection and discard criteria (inspection regime for in-service cranes)</div>
+        </div>
+        <div class="ref-item">
+          <div class="ref-id">EN 13411-3/4/6/7</div>
+          <div class="ref-desc">Terminations for steel wire ropes — ferrules, metal socketing, asymmetric/symmetric wedge sockets</div>
+        </div>
+        <div class="ref-item">
+          <div class="ref-id">EN 1991-3:2006</div>
+          <div class="ref-desc">Eurocode 1 — Actions on structures — Part 3: Actions induced by cranes and machinery (for building/structure designers receiving crane loads)</div>
+        </div>
+        <div class="ref-item">
+          <div class="ref-id">EN 1993-6:2007</div>
+          <div class="ref-desc">Eurocode 3 — Design of steel structures — Part 6: Crane supporting structures (runway beams, columns, brackets)</div>
+        </div>
+        <div class="ref-item">
+          <div class="ref-id">EN 13157:2004+A1:2009</div>
+          <div class="ref-desc">Cranes — Safety — Hand-powered cranes (manual hoists and travel mechanisms; referenced in EN 15011)</div>
+        </div>
+        <div class="ref-item">
+          <div class="ref-id">EN ISO 12100:2010</div>
+          <div class="ref-desc">Safety of machinery — General principles for design — Risk assessment and risk reduction (Type A, underpins all crane standards)</div>
+        </div>
+        <div class="ref-item">
+          <div class="ref-id">ISO 4301-1 / 4301-5</div>
+          <div class="ref-desc">Crane classification — Part 1: General; Part 5: Overhead travelling and portal bridge cranes (ISO classification used in non-EN markets)</div>
+        </div>
+        <div class="ref-item">
+          <div class="ref-id">EN 14502-1/2</div>
+          <div class="ref-desc">Equipment for lifting persons — Part 1: Suspended baskets; Part 2: Elevating control stations (when cranes are used for personnel access)</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- DIRECTIVE CONTEXT -->
+    <section id="directive">
+      <div class="section-header">
+        <span class="section-num">14</span>
+        <h2>EU Directive Context &amp; CE Marking</h2>
+      </div>
+      <div class="info-box note">
+        <div class="box-label">Machinery Directive 2006/42/EC → Machinery Regulation (EU) 2023/1230</div>
+        The current legal framework is the Machinery Directive 2006/42/EC. This will be replaced by the Machinery Regulation (EU) 2023/1230 on <strong>20 January 2027</strong>. Bridge cranes will remain within scope. CEN standards will need to be revised/reaffirmed against the new Regulation's Essential Health &amp; Safety Requirements (EHSRs).
+      </div>
+      <p>Compliance with EN 15011:2020 (and its referenced standards) gives a manufacturer a <strong>presumption of conformity</strong> with the relevant EHSRs of Directive 2006/42/EC, as mapped in Annex ZA of the standard. This is the primary route to CE marking without third-party certification (bridge cranes are not on Annex IV of the Directive and therefore do not require a Notified Body for conformity assessment — self-certification by the manufacturer is permissible).</p>
+
+      <h3>Key EHSR Mapping (Annex ZA of EN 15011:2020)</h3>
+      <table>
+        <thead>
+          <tr><th>EHSR</th><th>Addressed by</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>1.1.2 Principles of safety integration</td><td>EN 15011 §4, EN ISO 12100</td></tr>
+          <tr><td>1.2.x Control systems</td><td>EN 13135, EN 60204-32, EN ISO 13849-1</td></tr>
+          <tr><td>1.3.x Mechanical hazards</td><td>EN 13001 series, EN 15011 §5.2</td></tr>
+          <tr><td>1.5.1 Electrical supply</td><td>EN 60204-32</td></tr>
+          <tr><td>1.6.1/1.6.2 Maintenance access</td><td>EN 13586</td></tr>
+          <tr><td>1.7.x Information / marking</td><td>EN 12644-1, EN 12644-2</td></tr>
+          <tr><td>4.1 Load limitation</td><td>EN 12077-2, EN 13557</td></tr>
+          <tr><td>4.2.2 Controls of lifting operations</td><td>EN 13557, EN 60204-32</td></tr>
+        </tbody>
+      </table>
+
+      <div class="info-box warn" style="margin-top:20px">
+        <div class="box-label">Post-Brexit (UK)</div>
+        In Great Britain, EN 15011:2020 is published as BS EN 15011:2020. Compliance routes to UKCA marking are through the UK Supply of Machinery (Safety) Regulations 2008 (as amended). The technical requirements remain aligned with the EU standard; the Annex ZA reference is retained for guidance. Northern Ireland uses CE marking routes under the Windsor Framework.
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+  // Active nav tracking — observe both <section id> elements and named .std-card[id] sub-sections
+  const sections = document.querySelectorAll('section[id], .std-card[id]');
+  const navLinks = document.querySelectorAll('aside a');
+
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        navLinks.forEach(a => a.classList.remove('active'));
+        const active = document.querySelector(`aside a[href="#${entry.target.id}"]`);
+        if (active) active.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-20% 0px -70% 0px' });
+
+  sections.forEach(s => observer.observe(s));
+</script>
+</body>
+</html>

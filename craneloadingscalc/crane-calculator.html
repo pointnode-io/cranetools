@@ -1,0 +1,1020 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Crane Loading & Proof of Competence — EN 15011 / EN 13001</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>body{margin:0}select{appearance:auto}</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useMemo}=React;
+const G=9.81,ACCENT="#d97706",STEEL="#1e293b";
+const fmt=(x,dp=2)=>(x==null||!isFinite(x))?"—":Number(x).toLocaleString("en-GB",{minimumFractionDigits:dp,maximumFractionDigits:dp});
+
+// ─── Section data tables ────────────────────────────────────────────────────
+// All dimensions in mm. Properties computed from geometry (no root radius → ~1-2% conservative).
+// Verify h/b/tw/tf against SCI P363 (Blue Book) for final design.
+
+const UB=[
+  {n:"203x133x25",h:203.2,b:133.2,tw:5.7,tf:7.8},
+  {n:"203x133x30",h:206.8,b:133.9,tw:6.4,tf:9.6},
+  {n:"254x146x31",h:251.4,b:146.1,tw:6.0,tf:8.6},
+  {n:"254x146x37",h:256.0,b:146.4,tw:6.3,tf:10.9},
+  {n:"254x146x43",h:259.6,b:147.3,tw:7.2,tf:12.7},
+  {n:"305x165x40",h:303.4,b:165.0,tw:6.0,tf:10.2},
+  {n:"305x165x46",h:306.6,b:165.7,tw:6.7,tf:11.8},
+  {n:"305x165x54",h:310.4,b:166.9,tw:7.9,tf:13.7},
+  {n:"356x171x45",h:351.4,b:171.1,tw:7.0,tf:9.7},
+  {n:"356x171x51",h:355.0,b:171.5,tw:7.4,tf:11.5},
+  {n:"356x171x57",h:358.0,b:172.2,tw:8.1,tf:13.0},
+  {n:"356x171x67",h:363.4,b:173.2,tw:9.1,tf:15.7},
+  {n:"406x178x54",h:402.6,b:177.7,tw:7.7,tf:10.9},
+  {n:"406x178x60",h:406.4,b:177.9,tw:7.9,tf:12.8},
+  {n:"406x178x67",h:409.4,b:178.8,tw:8.8,tf:14.3},
+  {n:"406x178x74",h:412.8,b:179.5,tw:9.5,tf:16.0},
+  {n:"406x178x85",h:417.2,b:181.9,tw:10.9,tf:18.2},
+  {n:"457x152x52",h:449.8,b:152.4,tw:7.6,tf:10.9},
+  {n:"457x152x60",h:454.6,b:152.9,tw:8.1,tf:13.3},
+  {n:"457x152x67",h:458.0,b:153.8,tw:9.0,tf:15.0},
+  {n:"457x152x74",h:462.0,b:154.4,tw:9.6,tf:17.0},
+  {n:"457x152x82",h:465.8,b:155.3,tw:10.5,tf:18.9},
+  {n:"457x191x67",h:453.4,b:189.9,tw:8.5,tf:12.7},
+  {n:"457x191x74",h:457.0,b:190.4,tw:9.0,tf:14.5},
+  {n:"457x191x82",h:460.0,b:191.3,tw:9.9,tf:16.0},
+  {n:"457x191x89",h:463.4,b:191.9,tw:10.5,tf:17.7},
+  {n:"457x191x98",h:467.2,b:192.8,tw:11.4,tf:19.6},
+  {n:"533x210x82",h:528.3,b:208.8,tw:9.6,tf:13.2},
+  {n:"533x210x92",h:533.1,b:209.3,tw:10.1,tf:15.6},
+  {n:"533x210x101",h:536.7,b:210.0,tw:10.8,tf:17.4},
+  {n:"533x210x109",h:539.5,b:210.8,tw:11.6,tf:18.8},
+  {n:"533x210x122",h:544.5,b:211.9,tw:12.7,tf:21.3},
+  {n:"610x229x101",h:602.6,b:227.6,tw:10.5,tf:14.8},
+  {n:"610x229x113",h:607.6,b:228.2,tw:11.1,tf:17.3},
+  {n:"610x229x125",h:612.2,b:229.0,tw:11.9,tf:19.6},
+  {n:"610x229x140",h:617.2,b:230.2,tw:13.1,tf:22.1},
+  {n:"610x305x149",h:612.4,b:304.8,tw:11.9,tf:19.7},
+  {n:"610x305x179",h:620.2,b:307.1,tw:14.1,tf:23.6},
+  {n:"610x305x238",h:635.8,b:311.4,tw:18.4,tf:31.4},
+  {n:"686x254x125",h:677.9,b:253.0,tw:11.7,tf:16.2},
+  {n:"686x254x140",h:683.5,b:253.7,tw:12.4,tf:19.0},
+  {n:"686x254x152",h:687.5,b:254.5,tw:13.2,tf:21.0},
+  {n:"686x254x170",h:692.9,b:255.8,tw:14.5,tf:23.7},
+  {n:"762x267x134",h:750.0,b:264.4,tw:12.0,tf:15.5},
+  {n:"762x267x147",h:754.0,b:265.2,tw:12.8,tf:17.5},
+  {n:"762x267x173",h:762.2,b:266.7,tw:14.3,tf:21.6},
+  {n:"762x267x197",h:769.8,b:268.0,tw:15.6,tf:25.4},
+  {n:"762x267x220",h:777.2,b:269.5,tw:17.1,tf:29.0},
+  {n:"838x292x176",h:834.9,b:291.7,tw:14.0,tf:18.8},
+  {n:"838x292x194",h:840.7,b:292.4,tw:14.7,tf:21.7},
+  {n:"838x292x226",h:850.9,b:293.8,tw:16.1,tf:26.8},
+  {n:"914x305x201",h:903.0,b:303.3,tw:15.1,tf:20.2},
+  {n:"914x305x224",h:910.4,b:304.1,tw:15.9,tf:23.9},
+  {n:"914x305x253",h:918.4,b:305.5,tw:17.3,tf:27.9},
+  {n:"914x305x289",h:926.6,b:307.8,tw:19.6,tf:32.0},
+];
+
+const UC=[
+  {n:"152x152x23",h:152.4,b:152.2,tw:5.8,tf:6.8},
+  {n:"152x152x30",h:157.6,b:152.9,tw:6.5,tf:9.4},
+  {n:"152x152x37",h:161.8,b:154.4,tw:8.0,tf:11.5},
+  {n:"203x203x46",h:203.2,b:203.6,tw:7.2,tf:11.0},
+  {n:"203x203x52",h:206.2,b:204.3,tw:7.9,tf:12.5},
+  {n:"203x203x60",h:209.6,b:205.8,tw:9.4,tf:14.2},
+  {n:"203x203x71",h:215.8,b:206.4,tw:10.0,tf:17.3},
+  {n:"203x203x86",h:222.2,b:209.1,tw:12.7,tf:20.5},
+  {n:"254x254x73",h:254.1,b:254.6,tw:8.6,tf:14.2},
+  {n:"254x254x89",h:260.3,b:256.3,tw:10.3,tf:17.3},
+  {n:"254x254x107",h:266.7,b:258.8,tw:12.8,tf:20.5},
+  {n:"254x254x132",h:276.3,b:261.3,tw:15.3,tf:25.3},
+  {n:"254x254x167",h:289.1,b:265.2,tw:19.2,tf:31.7},
+  {n:"305x305x97",h:307.9,b:305.3,tw:9.9,tf:15.4},
+  {n:"305x305x118",h:314.5,b:307.4,tw:11.9,tf:18.7},
+  {n:"305x305x137",h:320.5,b:309.2,tw:13.7,tf:21.7},
+  {n:"305x305x158",h:327.1,b:311.2,tw:15.7,tf:25.0},
+  {n:"305x305x198",h:339.9,b:314.5,tw:19.1,tf:31.4},
+  {n:"305x305x240",h:352.5,b:318.4,tw:23.0,tf:37.7},
+  {n:"356x368x129",h:355.6,b:368.6,tw:10.4,tf:17.5},
+  {n:"356x368x153",h:362.0,b:370.5,tw:12.3,tf:20.7},
+  {n:"356x368x177",h:368.2,b:372.6,tw:14.4,tf:23.8},
+  {n:"356x368x202",h:374.6,b:374.7,tw:16.5,tf:27.0},
+  {n:"356x406x235",h:381.0,b:394.8,tw:18.4,tf:30.2},
+  {n:"356x406x287",h:393.6,b:399.0,tw:22.6,tf:36.5},
+  {n:"356x406x340",h:406.4,b:403.0,tw:26.6,tf:42.9},
+  {n:"356x406x393",h:419.0,b:407.0,tw:30.6,tf:49.2},
+  {n:"356x406x467",h:436.6,b:412.2,tw:35.8,tf:58.0},
+  {n:"356x406x551",h:455.6,b:418.5,tw:42.1,tf:67.5},
+  {n:"356x406x634",h:474.6,b:424.0,tw:47.6,tf:77.0},
+];
+
+const PFC=[
+  {n:"100x50x10",  h:100,b:50, tw:5.0,tf:8.5},
+  {n:"125x65x15",  h:125,b:65, tw:5.5,tf:9.5},
+  {n:"150x75x18",  h:150,b:75, tw:6.0,tf:10.0},
+  {n:"180x75x20",  h:180,b:75, tw:6.0,tf:10.5},
+  {n:"200x75x23",  h:200,b:75, tw:6.5,tf:11.0},
+  {n:"200x90x30",  h:200,b:90, tw:7.0,tf:12.5},
+  {n:"230x75x26",  h:230,b:75, tw:6.5,tf:11.5},
+  {n:"230x90x32",  h:230,b:90, tw:7.5,tf:12.5},
+  {n:"260x75x28",  h:260,b:75, tw:7.0,tf:12.0},
+  {n:"260x90x35",  h:260,b:90, tw:7.5,tf:13.0},
+  {n:"300x90x41",  h:300,b:90, tw:7.5,tf:13.5},
+  {n:"380x100x54", h:380,b:100,tw:8.0,tf:14.0},
+  {n:"430x100x64", h:430,b:100,tw:8.5,tf:14.5},
+];
+
+// ─── Section property functions ─────────────────────────────────────────────
+
+// I-section (UB/UC): inputs mm, outputs in cm-based design units
+function iProps({h,b,tw,tf}){
+  const hw=h-2*tf;
+  const Ix4=(b*h**3-(b-tw)*hw**3)/12;       // mm⁴
+  const Iy4=(2*tf*b**3+hw*tw**3)/12;        // mm⁴ (weak axis)
+  return {
+    h,b,tw,tf,
+    A:(2*b*tf+hw*tw)/100,                    // cm²
+    Ix:Ix4/1e4,                              // cm⁴
+    Wx:Ix4/(h/2)/1e3,                        // cm³
+    Iy:Iy4/1e4,                              // cm⁴
+    Wy:Iy4/(b/2)/1e3,                        // cm³
+    Aweb:hw*tw/100,                          // cm²
+  };
+}
+
+// Combined I + ∩ cap PFC
+// PFC rotated 90°: web (h_pfc×tw_pfc) lies horizontal on UB top flange at y=D;
+// two legs (b_pfc tall, tf_pfc thick) hang DOWN from y=D to y=D−b_pfc.
+function combinedProps(main, pfc){
+  const mp=iProps(main), pp=iProps(pfc);
+  const D=main.h, hp=pfc.h, bp=pfc.b, twp=pfc.tw, tfp=pfc.tf;
+
+  // Cap areas & centroids from UB base (y=0)
+  const Aplate=hp*twp,       yplate=D+twp/2;
+  const Alegs=2*bp*tfp,      ylegs=D-bp/2;
+  const Acap=Aplate+Alegs;
+  const ycap=(Aplate*yplate+Alegs*ylegs)/Acap;
+
+  const Atot=mp.A*100+Acap;           // mm²
+  const yc=(mp.A*100*(D/2)+Acap*ycap)/Atot;  // mm from UB base
+
+  // Strong-axis Ixx
+  const Imain=mp.Ix*1e4+mp.A*100*(yc-D/2)**2;
+  const Iplate=hp*twp**3/12+Aplate*(yc-yplate)**2;
+  const Ilegs=2*(tfp*bp**3/12+bp*tfp*(yc-ylegs)**2);
+  const Ixx=Imain+Iplate+Ilegs;
+
+  const Dtot=D+twp;
+  const ytop=Dtot-yc;
+  const Wx=Ixx/Math.max(yc,ytop)/1e3;   // governing fibre
+
+  // Weak-axis Iyy  (cap centred on section axis)
+  const Izzplate=twp*hp**3/12;
+  const dleg=hp/2-tfp/2;
+  const Izzlegs=2*(bp*tfp**3/12+bp*tfp*dleg**2);
+  const Izz=mp.Iy*1e4+Izzplate+Izzlegs;
+  const Wy=Izz/(hp/2)/1e3;
+
+  const pfcFits=(hp-2*tfp)>=main.b;
+  return {
+    A:Atot/100, Ix:Ixx/1e4, Wx, Iy:Izz/1e4, Wy,
+    Aweb:mp.Aweb,                            // shear: UB web only
+    h:Dtot, b:hp,
+    yc, Dtot, pfcFits,
+    innerW:hp-2*tfp, mainFlange:main.b,
+  };
+}
+
+// Box beam: all inputs mm
+function boxProps({Bt,Tt,Bb,Tb,Hw,Tw,s}){
+  const D=Tt+Hw+Tb;
+  const dweb=Bt/2-s-Tw/2;             // web centroid from box CL
+  const Atf=Bt*Tt, Abf=Bb*Tb, Aw=2*Tw*Hw;
+  const A=Atf+Abf+Aw;
+  const ytf=Tb+Hw+Tt/2, ybf=Tb/2, yw=Tb+Hw/2;
+  const yc=(Atf*ytf+Abf*ybf+Aw*yw)/A;
+
+  const Ixx=Bt*Tt**3/12+Atf*(yc-ytf)**2
+           +Bb*Tb**3/12+Abf*(yc-ybf)**2
+           +2*(Tw*Hw**3/12+Tw*Hw*(yc-yw)**2);
+  const Wx=Ixx/Math.max(yc,D-yc)/1e3;
+
+  const Iyy=Tt*Bt**3/12+Tb*Bb**3/12
+           +2*(Hw*Tw**3/12+Hw*Tw*dweb**2);
+  const Wy=Iyy/(Math.max(Bt,Bb)/2)/1e3;
+
+  return {
+    A:A/100, Ix:Ixx/1e4, Wx, Iy:Iyy/1e4, Wy,
+    Aweb:2*Hw*Tw/100,
+    h:D, b:Math.max(Bt,Bb),
+  };
+}
+
+function getSectionLib(secType){
+  if(secType==="UC"||secType==="UC+PFC") return UC;
+  return UB;
+}
+
+function computeSection(secType,mainSec,pfcSec,box){
+  if(secType==="Box") return boxProps(box);
+  const lib=getSectionLib(secType);
+  const m=lib.find(s=>s.n===mainSec)||lib[0];
+  if(secType==="UB+PFC"||secType==="UC+PFC"){
+    const p=PFC.find(s=>s.n===pfcSec)||PFC[0];
+    return combinedProps(m,p);
+  }
+  const sp=iProps(m);
+  return {...sp, pfcFits:true};
+}
+
+// Bottom flange dimensions for the transverse flange bending check.
+// For UB+PFC, the check is on the main section's bottom flange, not the cap.
+function bottomFlangeDims(secType, mainSec, box){
+  if(secType==="Box") return {tf:box.Tb, tw:box.Tw, hw:box.Hw, b:box.Bb};
+  const lib=getSectionLib(secType);
+  const m=lib.find(s=>s.n===mainSec)||lib[0];
+  return {tf:m.tf, tw:m.tw, hw:m.h-2*m.tf, b:m.b};
+}
+
+// Mass per metre of the runway beam section (kg/m).
+// For UB/UC/PFC the nominal mass is encoded in the section name (last token).
+// For Box beams it is derived from the cross-sectional area × steel density.
+function massPerMetre(secType, mainSec, pfcSec, sp){
+  if(secType==="Box") return sp.A*1e-4*7850;   // sp.A cm² → m², ×7850 kg/m³
+  const kgm=n=>parseFloat(n.split('x').pop())||0;
+  const m=kgm(mainSec);
+  if(secType==="UB+PFC"||secType==="UC+PFC") return m+kgm(pfcSec);
+  return m;
+}
+
+// ─── UI helpers ─────────────────────────────────────────────────────────────
+
+function Ico({n,s=14,c="currentColor"}){
+  const p={strokeWidth:2,stroke:c,fill:"none",strokeLinecap:"round",strokeLinejoin:"round"};
+  const paths={
+    ruler:<path {...p} d="M3 17 17 3l4 4L7 21z M7 11l2 2 M11 7l2 2"/>,
+    settings:<g {...p}><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></g>,
+    activity:<path {...p} d="M3 12h4l3 8 4-16 3 8h4"/>,
+    layers:<g {...p}><path d="M12 3 3 8l9 5 9-5z"/><path d="M3 13l9 5 9-5"/></g>,
+    gauge:<g {...p}><path d="M3 14a9 9 0 1 1 18 0"/><path d="M12 14l4-3"/></g>,
+    boxes:<g {...p}><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></g>,
+    alert:<g {...p}><path d="M12 3 2 20h20z"/><path d="M12 9v5M12 17h.01"/></g>,
+    check:<g {...p}><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></g>,
+    x:<g {...p}><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></g>,
+    info:<g {...p}><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M12 11v5"/></g>,
+  };
+  return <svg width={s} height={s} viewBox="0 0 24 24">{paths[n]}</svg>;
+}
+
+function Field({label,value,onChange,unit,hint,en,step="any"}){
+  return(
+    <label className="block">
+      <span className="flex items-baseline justify-between">
+        <span className="text-[11px] font-medium leading-tight text-slate-600">{label}</span>
+        {en&&<span title={en} className="ml-1 shrink-0 cursor-help rounded px-1 text-[9px] font-bold" style={{background:"#fef3c7",color:ACCENT,border:"1px solid #fcd34d"}}>EN</span>}
+      </span>
+      <span className="mt-1 flex items-stretch">
+        <input type="number" step={step} value={value}
+          onChange={e=>onChange(e.target.value===""?"":parseFloat(e.target.value))}
+          className="w-full rounded-l border border-slate-300 bg-white px-2 py-1 font-mono text-sm text-slate-900 outline-none focus:border-amber-500"/>
+        {unit&&<span className="flex items-center rounded-r border border-l-0 border-slate-300 bg-slate-100 px-2 text-[10px] font-mono text-slate-500">{unit}</span>}
+      </span>
+      {hint&&<span className="mt-0.5 block text-[10px] leading-tight text-slate-400">{hint}</span>}
+    </label>
+  );
+}
+
+function Bar({u}){
+  const pct=Math.min(u*100,130),col=u>1?"#dc2626":u>0.9?ACCENT:"#16a34a";
+  return <div className="h-2 w-full overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full transition-all" style={{width:pct+"%",background:col}}/></div>;
+}
+
+function Tab({id,active,set,icon,children}){
+  const on=active===id;
+  return <button onClick={()=>set(id)} className={"flex items-center gap-1.5 whitespace-nowrap rounded-t px-3 py-2 text-xs font-semibold "+(on?"bg-white text-slate-900":"bg-transparent text-slate-400 hover:text-slate-600")} style={on?{boxShadow:"inset 0 -2px 0 "+ACCENT}:{}}><Ico n={icon} s={14}/>{children}</button>;
+}
+
+function Row({k,v,bold}){
+  return <div className="flex items-center justify-between border-b border-slate-100 pb-1 last:border-0 last:pb-0"><dt className="text-slate-500">{k}</dt><dd className={bold?"font-bold text-slate-900":"text-slate-700"}>{v}</dd></div>;
+}
+
+function Util({label,detail,u}){
+  const ok=u<=1;
+  return <div>
+    <div className="mb-1 flex items-center justify-between">
+      <span className="text-[11px] font-semibold text-slate-700">{label}</span>
+      <span className="font-mono text-xs font-bold" style={{color:ok?"#16a34a":"#dc2626"}}>{fmt(u*100,1)}%</span>
+    </div>
+    <Bar u={u}/>
+    <div className="mt-1 font-mono text-[10px] text-slate-400">{detail}</div>
+  </div>;
+}
+
+function BeamSVG({a,Lb}){
+  const W=240,H=68,pad=20,span=W-2*pad;
+  const aPx=Lb>0?Math.min((a/Lb)*span,span):0;
+  const x1=pad+(span-aPx)/2,x2=x1+aPx,fit=a<Lb;
+  return <svg viewBox={"0 0 "+W+" "+H} className="mt-3 w-full">
+    <line x1={pad} y1={40} x2={W-pad} y2={40} stroke={STEEL} strokeWidth="3"/>
+    <polygon points={pad+",40 "+(pad-5)+",52 "+(pad+5)+",52"} fill={STEEL}/>
+    <polygon points={(W-pad)+",40 "+(W-pad-5)+",52 "+(W-pad+5)+",52"} fill={STEEL}/>
+    {fit?[x1,x2].map((x,i)=><g key={i}>
+      <line x1={x} y1={16} x2={x} y2={38} stroke={ACCENT} strokeWidth="2"/>
+      <polygon points={x+",38 "+(x-4)+",30 "+(x+4)+",30"} fill={ACCENT}/>
+      <circle cx={x} cy={14} r="3" fill={ACCENT}/>
+    </g>):<g>
+      <line x1={W/2} y1={16} x2={W/2} y2={38} stroke="#dc2626" strokeWidth="2"/>
+      <polygon points={(W/2)+",38 "+(W/2-4)+",30 "+(W/2+4)+",30"} fill="#dc2626"/>
+      <circle cx={W/2} cy={14} r="3" fill="#dc2626"/>
+    </g>}
+    <text x={W/2} y={64} textAnchor="middle" fontSize="8" fill="#94a3b8" fontFamily="monospace">
+      {fit?"2 wheels @ "+a+"m apart on "+Lb+"m span":"a="+a+"m ≥ Lb="+Lb+"m"}
+    </text>
+  </svg>;
+}
+
+// Plan-view geometry diagram — labels all user inputs on the Geometry & Design tab
+function CraneLayoutSVG(){
+  const rl="#1e293b", br="#d97706", ecC="#64748b", dim="#94a3b8",
+        dimD="#475569", e1c="#16a34a", e2c="#0284c7";
+
+  // Fixed schematic coordinates (not driven by live inputs)
+  const r1=82, r2=182, rh=8;        // rail centreline y, half-thickness
+  const wL=186, wR=272;              // wheel x-positions (wheelbase a)
+  const cols=[76,186,302,392];        // 4 column x-positions along each runway
+  const lbX1=76, lbX2=186;           // Lb shown between first two adjacent columns
+  const G1=200, G2=254, gw=8;        // girder left-edge, right-edge, width
+  const hkY=108, hookY=133;          // trolley centre y, hook circle centre y
+  const cx=231;                      // horizontal centre of bridge
+
+  return <svg viewBox="0 0 460 208" className="w-full rounded border border-slate-200"
+    style={{background:"#f8fafc",fontFamily:"ui-monospace,monospace"}}>
+
+    {/* Header */}
+    <text x="230" y="11" textAnchor="middle" fontSize="7" fill={dim}>
+      PLAN VIEW — overhead crane from above (schematic, not to scale)
+    </text>
+
+    {/* ── Runway beams ── */}
+    <rect x="38" y={r1-rh} width="384" height={rh*2} fill={rl} rx="2"/>
+    <rect x="38" y={r2-rh} width="384" height={rh*2} fill={rl} rx="2"/>
+    <text x="33" y={r1+3} textAnchor="end" fontSize="8" fill={dimD}>Rail 1</text>
+    <text x="33" y={r2+3} textAnchor="end" fontSize="8" fill={dimD}>Rail 2</text>
+
+    {/* ── Column supports — 4 per runway ── */}
+    {cols.map(x=><g key={x}>
+      <rect x={x-7} y={r1-rh-11} width="14" height="11" fill={dim} rx="1"/>
+      <rect x={x-7} y={r2+rh}    width="14" height="11" fill={dim} rx="1"/>
+    </g>)}
+
+    {/* ── End carriages (run along each rail) ── */}
+    <rect x={wL-8} y={r1-rh-4} width={wR-wL+16} height="12" fill={ecC} rx="2" opacity="0.75"/>
+    <rect x={wL-8} y={r2+rh-8} width={wR-wL+16} height="12" fill={ecC} rx="2" opacity="0.75"/>
+
+    {/* ── Bridge girders (span perpendicular to rails) ── */}
+    <rect x={G1} y={r1+rh} width={gw} height={r2-r1-rh*2} fill={br}/>
+    <rect x={G2} y={r1+rh} width={gw} height={r2-r1-rh*2} fill={br}/>
+
+    {/* ── Trolley ── */}
+    <rect x={G1-1} y={hkY-8} width={G2-G1+gw+2} height="16" fill={br} rx="2"/>
+    <text x={cx} y={hkY+4} textAnchor="middle" fontSize="8" fill="white" fontWeight="700">T</text>
+
+    {/* ── Hook ── */}
+    <line x1={cx} y1={hkY+8} x2={cx} y2={hookY-4} stroke={br} strokeWidth="1.5" strokeDasharray="2 2"/>
+    <circle cx={cx} cy={hookY} r="4" fill="none" stroke={br} strokeWidth="1.5"/>
+
+    {/* ── Wheels ── */}
+    <circle cx={wL} cy={r1} r="5" fill="white" stroke={rl} strokeWidth="2"/>
+    <circle cx={wR} cy={r1} r="5" fill="white" stroke={rl} strokeWidth="2"/>
+    <circle cx={wL} cy={r2} r="5" fill="white" stroke={rl} strokeWidth="2"/>
+    <circle cx={wR} cy={r2} r="5" fill="white" stroke={rl} strokeWidth="2"/>
+
+    {/* ── Mass callout labels ── */}
+    {/* Bridge mass */}
+    <line x1={G2+gw+4} y1={(r1+r2)/2} x2={G2+gw+20} y2={(r1+r2)/2-12} stroke="#d4a853" strokeWidth="0.8"/>
+    <text x={G2+gw+22} y={(r1+r2)/2-14} fontSize="7.5" fill="#b45309">Bridge mass</text>
+    <text x={G2+gw+22} y={(r1+r2)/2-4}  fontSize="7"   fill="#b45309">(auto-calc)</text>
+    {/* Trolley mass */}
+    <line x1={G1-2} y1={hkY} x2={G1-18} y2={hkY-14} stroke={dim} strokeWidth="0.8"/>
+    <text x={G1-20} y={hkY-16} textAnchor="end" fontSize="7.5" fill={dim}>Trolley mass</text>
+    {/* SWL */}
+    <text x={cx+8} y={hookY+3} fontSize="7.5" fill="#b45309">SWL</text>
+
+    {/* ── Dimension: Lb (one bay between adjacent columns) ── */}
+    <line x1={lbX1} y1="22"  x2={lbX2} y2="22"  stroke={dimD} strokeWidth="1"/>
+    <line x1={lbX1} y1="18"  x2={lbX1} y2="26"  stroke={dimD} strokeWidth="1"/>
+    <line x1={lbX2} y1="18"  x2={lbX2} y2="26"  stroke={dimD} strokeWidth="1"/>
+    <text x={(lbX1+lbX2)/2} y="16" textAnchor="middle" fontSize="9" fill={dimD} fontWeight="700">Lb</text>
+
+    {/* ── Dimension: a ── */}
+    <line x1={wL}  y1="45"  x2={wR}  y2="45"  stroke={dimD} strokeWidth="1"/>
+    <line x1={wL}  y1="41"  x2={wL}  y2="49"  stroke={dimD} strokeWidth="1"/>
+    <line x1={wR}  y1="41"  x2={wR}  y2="49"  stroke={dimD} strokeWidth="1"/>
+    <text x={(wL+wR)/2} y="39" textAnchor="middle" fontSize="9" fill={dimD} fontWeight="700">a</text>
+
+    {/* ── Dimension: L (right side) ── */}
+    <line x1="436" y1={r1}  x2="436" y2={r2}  stroke={dimD} strokeWidth="1"/>
+    <line x1="432" y1={r1}  x2="440" y2={r1}  stroke={dimD} strokeWidth="1"/>
+    <line x1="432" y1={r2}  x2="440" y2={r2}  stroke={dimD} strokeWidth="1"/>
+    <text x="444" y={(r1+r2)/2+3} fontSize="9" fill={dimD} fontWeight="700">L</text>
+
+    {/* ── Dimension: e₁ (left side, rail 1 → hook) ── */}
+    <line x1="152" y1={r1}    x2="152" y2={hookY} stroke={e1c} strokeWidth="1"/>
+    <line x1="148" y1={r1}    x2="156" y2={r1}    stroke={e1c} strokeWidth="1"/>
+    <line x1="148" y1={hookY} x2="156" y2={hookY} stroke={e1c} strokeWidth="1"/>
+    <text x="146" y={(r1+hookY)/2+3} textAnchor="end" fontSize="9" fill={e1c} fontWeight="700">e₁</text>
+
+    {/* ── Dimension: e₂ (left side, hook → rail 2) ── */}
+    <line x1="152" y1={hookY} x2="152" y2={r2}    stroke={e2c} strokeWidth="1"/>
+    <line x1="148" y1={r2}    x2="156" y2={r2}    stroke={e2c} strokeWidth="1"/>
+    <text x="146" y={(hookY+r2)/2+3} textAnchor="end" fontSize="9" fill={e2c} fontWeight="700">e₂</text>
+
+    {/* Dashed leader: hook position → e-dimension line */}
+    <line x1={cx} y1={hookY} x2="156" y2={hookY} stroke={dim} strokeWidth="0.8" strokeDasharray="3 2"/>
+
+    {/* ── Crane travel direction arrow ── */}
+    <line x1="318" y1={r1-rh-16} x2="356" y2={r1-rh-16} stroke={dim} strokeWidth="1"/>
+    <polygon points={`356,${r1-rh-20} 364,${r1-rh-16} 356,${r1-rh-12}`} fill={dim}/>
+    <text x="316" y={r1-rh-12} textAnchor="end" fontSize="7" fill={dim}>long travel →</text>
+
+    {/* ── Legend ── */}
+    <rect x="38" y="193" width="384" height="13" fill="#f1f5f9" rx="2"/>
+    <rect x="44" y="196" width="10" height="7" fill={br} rx="1"/>
+    <text x="57" y="204" fontSize="7" fill={dimD}>Girder(s)</text>
+    <rect x="95" y="196" width="14" height="7" fill={ecC} rx="1" opacity="0.75"/>
+    <text x="112" y="204" fontSize="7" fill={dimD}>End carriage</text>
+    <circle cx="170" cy="199" r="4" fill="white" stroke={rl} strokeWidth="1.5"/>
+    <text x="177" y="204" fontSize="7" fill={dimD}>Wheel</text>
+    <rect x="210" y="196" width="10" height="7" fill={br} rx="1"/>
+    <text x="223" y="204" fontSize="7" fill={dimD}>Trolley (T)</text>
+    <rect x="265" y="196" width="7" height="7" fill="#94a3b8" rx="1"/>
+    <text x="275" y="204" fontSize="7" fill={dimD}>Column support</text>
+
+  </svg>;
+}
+
+// Cross-section schematic SVGs
+function SectionSVG({secType,sp,box,mainSec,pfcSec,mainLib}){
+  const W=180,H=110,cx=W/2;
+  const main=mainLib?mainLib.find(s=>s.n===mainSec)||mainLib[0]:null;
+  const pfc=PFC.find(s=>s.n===pfcSec)||PFC[0];
+
+  if(secType==="Box"){
+    // Draw box beam proportionally
+    const scaleH=Math.min(80/(box.Hw+box.Tt+box.Tb),0.25);
+    const scaleB=Math.min(120/Math.max(box.Bt,box.Bb),0.3);
+    const sc=Math.min(scaleH,scaleB);
+    const D=(box.Hw+box.Tt+box.Tb)*sc, Bt=box.Bt*sc, Bb=box.Bb*sc;
+    const Tt=Math.max(box.Tt*sc,3), Tb=Math.max(box.Tb*sc,3);
+    const Tw=Math.max(box.Tw*sc,2), Hw=box.Hw*sc;
+    const s_sc=box.s*sc;
+    const x0=cx-Bt/2, y0=(H-D)/2;
+    // top flange
+    const x0b=cx-Bb/2;
+    // webs
+    const wxl=x0+s_sc, wxr=cx+Bt/2-s_sc-Tw;
+    return <svg viewBox={"0 0 "+W+" "+H} className="w-full">
+      <rect x={x0} y={y0} width={Bt} height={Tt} fill={ACCENT} opacity="0.7"/>
+      <rect x={x0b} y={y0+D-Tb} width={Bb} height={Tb} fill={ACCENT} opacity="0.7"/>
+      <rect x={wxl} y={y0+Tt} width={Tw} height={Hw} fill={STEEL} opacity="0.6"/>
+      <rect x={wxr} y={y0+Tt} width={Tw} height={Hw} fill={STEEL} opacity="0.6"/>
+      <text x={cx} y={y0-4} textAnchor="middle" fontSize="7" fill="#64748b" fontFamily="monospace">Bt={box.Bt}</text>
+      <text x={cx} y={y0+D+10} textAnchor="middle" fontSize="7" fill="#64748b" fontFamily="monospace">Bb={box.Bb}</text>
+      <text x={x0-2} y={y0+D/2} textAnchor="end" fontSize="7" fill="#64748b" fontFamily="monospace">hw={box.Hw}</text>
+    </svg>;
+  }
+
+  if(!main) return null;
+  const scH=Math.min(80/main.h,0.22), scB=Math.min(100/main.b,0.3);
+  const sc=Math.min(scH,scB);
+  const H_=main.h*sc, B=main.b*sc, tw=Math.max(main.tw*sc,2.5), tf=Math.max(main.tf*sc,3);
+  const hw=H_-2*tf;
+  const y0=(H-H_)/2;
+
+  const iShape=<g>
+    <rect x={cx-B/2} y={y0} width={B} height={tf} fill={ACCENT} opacity="0.7"/>
+    <rect x={cx-B/2} y={y0+H_-tf} width={B} height={tf} fill={ACCENT} opacity="0.7"/>
+    <rect x={cx-tw/2} y={y0+tf} width={tw} height={hw} fill={STEEL} opacity="0.6"/>
+  </g>;
+
+  if(secType==="UB+PFC"||secType==="UC+PFC"){
+    const capW=Math.min(pfc.h*sc, B+20);
+    const capLegH=Math.max(pfc.b*sc,4);
+    const capTw=Math.max(pfc.tw*sc,2);
+    const capTf=Math.max(pfc.tf*sc,2);
+    const fits=sp.pfcFits!==false;
+    const capCol=fits?"#0ea5e9":"#ef4444";
+    // ∩ configuration: web plate rests on top of UB (y0-capTw → y0);
+    // legs hang DOWN from the plate ends (y0 → y0+capLegH), gripping the UB top flange.
+    return <svg viewBox={"0 0 "+W+" "+H} className="w-full">
+      {iShape}
+      <rect x={cx-capW/2} y={y0-capTw} width={capW}  height={capTw}   fill={capCol} opacity="0.8"/>
+      <rect x={cx-capW/2} y={y0}        width={capTf}  height={capLegH} fill={capCol} opacity="0.5"/>
+      <rect x={cx+capW/2-capTf} y={y0}  width={capTf}  height={capLegH} fill={capCol} opacity="0.5"/>
+      <text x={cx} y={H-2} textAnchor="middle" fontSize="7" fill="#94a3b8" fontFamily="monospace">
+        {main.n} + PFC {pfc.n}
+      </text>
+    </svg>;
+  }
+
+  return <svg viewBox={"0 0 "+W+" "+H} className="w-full">
+    {iShape}
+    <text x={cx} y={H-2} textAnchor="middle" fontSize="7" fill="#94a3b8" fontFamily="monospace">{main.n}</text>
+  </svg>;
+}
+
+// Segmented type selector
+function TypeSel({value,onChange}){
+  const opts=["UB","UC","UB+PFC","UC+PFC","Box"];
+  return <div className="flex flex-wrap gap-1 mb-3">
+    {opts.map(o=><button key={o} onClick={()=>onChange(o)}
+      className={"rounded px-2.5 py-1 text-[11px] font-semibold transition-colors "+(value===o?"text-white":"bg-slate-100 text-slate-500 hover:bg-slate-200")}
+      style={value===o?{background:STEEL}:{}}>{o}</button>)}
+  </div>;
+}
+
+// Read-only property chips
+function PropChips({sp}){
+  const items=[
+    ["Wx",fmt(sp.Wx,0),"cm³"],["Wy",fmt(sp.Wy,0),"cm³"],
+    ["Aweb",fmt(sp.Aweb,1),"cm²"],["Ix",fmt(sp.Ix,0),"cm⁴"],
+    ["A",fmt(sp.A,1),"cm²"],
+  ];
+  return <div className="mt-2 flex flex-wrap gap-1.5">
+    {items.map(([k,v,u])=><div key={k} className="rounded bg-slate-100 px-2 py-1 font-mono text-[10px]">
+      <span className="text-slate-400">{k} </span>
+      <span className="font-bold text-slate-800">{v}</span>
+      <span className="text-slate-400"> {u}</span>
+    </div>)}
+  </div>;
+}
+
+// ─── Main app ────────────────────────────────────────────────────────────────
+
+function App(){
+  const [tab,setTab]=useState("geo");
+
+  // Crane geometry
+  const [geo,setGeo]=useState({L:20,a:3,e1:1,e2:1,Lb:6,beamCount:2});
+  const [mass,setMass]=useState({ec:1500,trolley:2000,hoist:10000});
+  const [fac,setFac]=useState({phi1:1.1,phi2:1.3,phi4:1.0,phi5:1.5,phi7:1.25});
+  const [hz,setHz]=useState({aLong:0.3,aCross:0.3,buffer:20,alpha:0.015,lambda:0.5,fOver:""});
+
+  // Section definition
+  const [secType,setSecType]=useState("UB");
+  const [mainSec,setMainSec]=useState("457x191x74");
+  const [pfcSec,setPfcSec]=useState("230x90x32");
+  const [box,setBox]=useState({Bt:400,Tt:20,Bb:300,Tb:20,Hw:400,Tw:12,s:20});
+
+  // Underslung trolley (single girder only)
+  const [trolley,setTrolley]=useState({nw:4,g:150,as:50});
+
+  // Material & fatigue
+  const [mat,setMat]=useState({fy:355,gammaM:1.1});
+  const [fat,setFat]=useState({dsc:90,sm:0.4,m:3,gammaMf:1.1});
+
+  const [combos,setCombos]=useState([
+    {name:"A — Hoisting (regular)",    gG:1.22,gL:1.34,phi2:true, phi4:false,travel:false,skew:false,buffer:false},
+    {name:"B — Travelling (occasional)",gG:1.16,gL:1.22,phi2:false,phi4:true, travel:true, skew:true, buffer:false},
+    {name:"C — Buffer (exceptional)",  gG:1.10,gL:1.10,phi2:false,phi4:false,travel:false,skew:false,buffer:true},
+  ]);
+
+  const set=setter=>(k,v)=>setter(s=>({...s,[k]:v}));
+  const sGeo=set(setGeo),sMass=set(setMass),sFac=set(setFac),sHz=set(setHz);
+  const sMat=set(setMat),sFat=set(setFat),sBox=set(setBox),sTrolley=set(setTrolley);
+  const upCombo=(i,k,v)=>setCombos(c=>c.map((r,j)=>j===i?{...r,[k]:v}:r));
+
+  const mainLib=getSectionLib(secType);
+  const sp=useMemo(()=>computeSection(secType,mainSec,pfcSec,box),[secType,mainSec,pfcSec,box]);
+  const bridgeMassPerM=useMemo(()=>massPerMetre(secType,mainSec,pfcSec,sp),[secType,mainSec,pfcSec,sp]);
+  const bfDims=useMemo(()=>bottomFlangeDims(secType,mainSec,box),[secType,mainSec,box]);
+
+  const R=useMemo(()=>{
+    const {L,a,e1,e2,Lb}=geo;
+    const bridgeMassTotal=bridgeMassPerM*L*geo.beamCount;
+    const Wb=bridgeMassTotal*G,Wec=mass.ec*G,Wt=mass.trolley*G,Wh=mass.hoist*G;
+    const f1=(L-e1)/L, f2=e2/L;
+    const pDeadWheel=(Wb/2+Wec+Wt*f1)/2;
+    const pHoist=(Wh*f1)/2;
+    const pMin=(Wb/2+Wec+(Wt+Wh)*f2)/2;
+    const sumQ=Wb+2*Wec+Wt+Wh;
+    const fSkew=(hz.fOver!==""&&hz.fOver!=null)?Number(hz.fOver):Math.min(0.3,0.3*(1-Math.exp(-250*hz.alpha)));
+    const ySkewWheel=fSkew*hz.lambda*sumQ/2;
+    const hCrossWheel=(mass.trolley+mass.hoist)*hz.aCross*fac.phi5/4;
+    const hLongWheel=(bridgeMassTotal+2*mass.ec+mass.trolley+mass.hoist)*hz.aLong*fac.phi5/4;
+    const bufferForce=fac.phi7*hz.buffer*1000;
+    const rows=combos.map(c=>{
+      const phi4=c.phi4?fac.phi4:1;
+      const dead=pDeadWheel*fac.phi1*phi4;
+      const hoist=pHoist*(c.phi2?fac.phi2:1)*phi4;
+      const Pv=c.gG*dead+c.gL*hoist;
+      let Ht=0;
+      if(c.travel)Ht=Math.max(Ht,hCrossWheel);
+      if(c.skew)  Ht=Math.max(Ht,ySkewWheel);
+      Ht=c.gG*Ht;
+      const Hl=c.travel?c.gG*hLongWheel:0;
+      const Hbuf=c.buffer?bufferForce:0;
+      return {name:c.name,Pv,Ht,Hl,Hbuf};
+    });
+    const govV=rows.reduce((m,r)=>r.Pv>m.Pv?r:m,rows[0]);
+    const govH=rows.reduce((m,r)=>r.Ht>m.Ht?r:m,rows[0]);
+    const P=govV.Pv,H=govH.Ht;
+    const bothFit=a<Lb;
+    const Mx=bothFit?(P/(2*Lb))*(Lb-a/2)**2:(P*Lb)/4;
+    const My=bothFit?(H/(2*Lb))*(Lb-a/2)**2:(H*Lb)/4;
+    const Vmax=bothFit?P*(2-a/Lb):P;
+
+    // Section props (cm-based, formulae require N·m/cm³ = N/mm² identity)
+    const {Wx,Wy,Aweb,Ix}=sp;
+    const sigX=Mx/Wx, sigY=My/Wy, sigTot=sigX+sigY;
+    const tau=Vmax/(Aweb*100);
+    const fRd=mat.fy/mat.gammaM;
+    const tauRd=mat.fy/(Math.sqrt(3)*mat.gammaM);
+    const uBending=sigTot/fRd, uShear=tau/tauRd;
+    const uStatic=Math.max(uBending,uShear);
+
+    const Pchar=pDeadWheel*fac.phi1+pHoist*fac.phi2;
+    const Mchar=bothFit?(Pchar/(2*Lb))*(Lb-a/2)**2:(Pchar*Lb)/4;
+    const dSig=Mchar/Wx;
+    const dSigRd=(fat.dsc*fat.sm**(-1/fat.m))/fat.gammaMf;
+    const uFat=dSig/dSigRd;
+
+    const E_s=210000,I_mm4=Ix*1e4,Lb_mm=Lb*1000,c_mm=Math.max((Lb_mm-a*1000)/2,0);
+    const delta_mm=(bothFit&&c_mm>0)
+      ?(Pchar*c_mm/(24*E_s*I_mm4))*(3*Lb_mm**2-4*c_mm**2)
+      :(Pchar*Lb_mm**3)/(48*E_s*I_mm4);
+    const deltaLim=Lb_mm/600;
+    const uDefl=delta_mm/deltaLim;
+
+    // ── Bottom flange transverse bending (single girder underslung hoist) ──
+    // Method: EN 1993-6 §5.7 — wheel load dispersed at 30° through web height;
+    // flange cantilevers from web face to wheel contact point.
+    // Biaxial interaction: longitudinal (main bending) + transverse (flange bending).
+    let sigTrans=0,Fw_fl=0,cf=0,leff_fl=0,uFlange=0,uFlangeCombo=0,flangeWarn="";
+    if(geo.beamCount===1){
+      const {tf,tw,hw,b:bf}=bfDims;
+      // Design wheel force — combination A (hoisting governs for hoist load)
+      const gG0=combos[0].gG, gL0=combos[0].gL;
+      Fw_fl=(gL0*mass.hoist*G*fac.phi2 + gG0*mass.trolley*G*fac.phi1)/trolley.nw;
+      // Moment arm: web face to wheel contact centreline
+      cf=trolley.g/2 - tw/2;
+      // Effective dispersion length along beam (EN 1993-6: 30° through web)
+      leff_fl=trolley.as + 1.155*hw;
+      if(trolley.g/2>bf/2) flangeWarn="Wheel gauge exceeds flange width — wheel is off the flange.";
+      else if(cf<=0)        flangeWarn="Wheel gauge ≤ web thickness — wheel is under the web.";
+      else{
+        // Transverse bending stress at web–flange root, bottom surface
+        sigTrans=6*Fw_fl*cf/(leff_fl*tf*tf);
+        uFlange=sigTrans/fRd;
+        // Biaxial interaction: longitudinal (sigX) + transverse, both tensile at bottom root
+        const sigEq=Math.sqrt(sigX**2+sigTrans**2-sigX*sigTrans);
+        uFlangeCombo=sigEq/fRd;
+      }
+    }
+
+    return {pMin,fSkew,hLongWheel,rows,govV,govH,P,H,Mx,My,Vmax,Rmax:Vmax,
+            sigX,sigY,sigTot,tau,fRd,tauRd,
+            uBending,uShear,uStatic,dSig,dSigRd,uFat,
+            delta_mm,deltaLim,uDefl,
+            sigTrans,Fw_fl,cf,leff_fl,uFlange,uFlangeCombo,flangeWarn};
+  },[geo,mass,fac,hz,combos,sp,mat,fat,bridgeMassPerM,bfDims,trolley]);
+
+  const govU=Math.max(R.uStatic,R.uFat,R.uDefl,geo.beamCount===1?R.uFlangeCombo:0);
+  const wheelsFit=geo.a<geo.Lb;
+
+  // When section type changes, try to keep same section name if it exists in new lib
+  const handleSecType=t=>{
+    setSecType(t);
+    const newLib=t==="UC"||t==="UC+PFC"?UC:UB;
+    if(!newLib.find(s=>s.n===mainSec)) setMainSec(newLib[Math.floor(newLib.length/2)].n);
+  };
+
+  return(
+  <div className="min-h-screen w-full bg-slate-100 p-3 sm:p-6" style={{fontFamily:"ui-sans-serif,system-ui,sans-serif"}}>
+   <div className="mx-auto max-w-6xl">
+
+    <div className="mb-4 flex items-center gap-3">
+      <div className="flex h-10 w-10 items-center justify-center rounded" style={{background:STEEL}}><Ico n="ruler" s={20} c={ACCENT}/></div>
+      <div>
+        <h1 className="text-lg font-bold tracking-tight text-slate-900">Crane Loading &amp; Proof of Competence</h1>
+        <p className="font-mono text-[11px] text-slate-500">Overhead travelling crane · 4-wheel · EN 15011 / EN 13001-1·-2·-3-1 · runway beam checks</p>
+      </div>
+    </div>
+
+    <div className="mb-2 flex items-start gap-2 rounded border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-900">
+      <Ico n="alert" s={14} c="#b45309"/>
+      <span>Fields tagged <b>EN</b> are standard-derived — confirm φ factors, γ, combination definitions, and fatigue resistances against your licensed edition. Section dimensions from SCI P363 (Blue Book); root radius excluded (~1–2% conservative on Wx/Ix).</span>
+    </div>
+    {!wheelsFit&&<div className="mb-4 flex items-start gap-2 rounded border border-red-300 bg-red-50 px-3 py-2 text-[11px] text-red-900">
+      <Ico n="alert" s={14} c="#b91c1c"/>
+      <span><b>Geometry warning:</b> wheelbase a ({geo.a} m) ≥ runway span Lb ({geo.Lb} m). Results use single central load fallback — treat with caution.</span>
+    </div>}
+    {(secType==="UB+PFC"||secType==="UC+PFC")&&sp.pfcFits===false&&<div className="mb-4 flex items-start gap-2 rounded border border-red-300 bg-red-50 px-3 py-2 text-[11px] text-red-900">
+      <Ico n="alert" s={14} c="#b91c1c"/>
+      <span><b>PFC fit warning:</b> PFC inner width ({fmt(sp.innerW,0)} mm) &lt; main section flange width ({fmt(sp.mainFlange,0)} mm). Cap will not straddle the flange — choose a wider PFC.</span>
+    </div>}
+
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+     <div className="lg:col-span-2">
+      <div className="flex gap-1 overflow-x-auto border-b border-slate-200 px-1">
+        <Tab id="geo"  active={tab} set={setTab} icon="ruler">Geometry &amp; Design</Tab>
+        <Tab id="fac"  active={tab} set={setTab} icon="settings">φ Factors</Tab>
+        <Tab id="hz"   active={tab} set={setTab} icon="activity">Horizontal &amp; Skew</Tab>
+        <Tab id="comb" active={tab} set={setTab} icon="layers">Combinations</Tab>
+      </div>
+
+      <div className="rounded-b rounded-tr bg-white p-4 shadow-sm">
+
+       {tab==="geo"&&<div>
+
+         {/* ── Plan-view layout diagram ───────────────────── */}
+         <div className="mb-4">
+           <CraneLayoutSVG/>
+         </div>
+
+         {/* ── Geometry & mass ───────────────────────────── */}
+         <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Crane geometry</div>
+         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 mb-4">
+           <Field label="Crane span (rail–rail) L" value={geo.L} onChange={v=>sGeo("L",v)} unit="m"/>
+           <Field label="End-carriage wheelbase a" value={geo.a} onChange={v=>sGeo("a",v)} unit="m" hint="wheel-to-wheel along rail"/>
+           <Field label="Runway beam span Lb" value={geo.Lb} onChange={v=>sGeo("Lb",v)} unit="m" hint="between supports"/>
+           <Field label="Min hook approach e₁ (rail 1)" value={geo.e1} onChange={v=>sGeo("e1",v)} unit="m"/>
+           <Field label="Min hook approach e₂ (rail 2)" value={geo.e2} onChange={v=>sGeo("e2",v)} unit="m"/>
+           <div/>
+           <Field label="End-carriage mass (each)" value={mass.ec} onChange={v=>sMass("ec",v)} unit="kg"/>
+           <Field label="Trolley / crab mass" value={mass.trolley} onChange={v=>sMass("trolley",v)} unit="kg"/>
+           <Field label="Rated hoist load SWL" value={mass.hoist} onChange={v=>sMass("hoist",v)} unit="kg"/>
+         </div>
+
+         {/* ── Beam section ──────────────────────────────── */}
+         <div className="border-t border-slate-200 pt-4">
+           <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Crane beam section</div>
+
+           {/* Bridge config + computed mass */}
+           <div className="mb-3">
+             <div className="mb-1 text-[11px] font-medium text-slate-600">Bridge configuration &amp; girder mass</div>
+             <div className="flex gap-2 mb-2">
+               {[{n:1,label:"Single girder"},{n:2,label:"Double girder"}].map(({n,label})=>(
+                 <button key={n} onClick={()=>sGeo("beamCount",n)}
+                   className={"rounded border px-3 py-1.5 text-xs font-semibold transition-colors "+(geo.beamCount===n?"text-white border-transparent":"border-slate-300 bg-white text-slate-500 hover:bg-slate-50")}
+                   style={geo.beamCount===n?{background:STEEL}:{}}>
+                   {label}
+                 </button>
+               ))}
+             </div>
+             <div className="rounded border border-slate-200 bg-slate-50 px-3 py-2 font-mono text-[11px]">
+               <span className="text-slate-500">Section mass </span>
+               <span className="font-bold text-slate-800">{fmt(bridgeMassPerM,1)} kg/m</span>
+               <span className="text-slate-400"> × {geo.L} m × {geo.beamCount} girder{geo.beamCount>1?"s":""} = </span>
+               <span className="font-bold text-slate-900">{fmt(bridgeMassPerM*geo.L*geo.beamCount,0)} kg</span>
+               <span className="ml-2 text-slate-400">(structural steel only)</span>
+             </div>
+           </div>
+
+           {/* Section type selector */}
+           <TypeSel value={secType} onChange={handleSecType}/>
+
+           {/* Standard section dropdown */}
+           {(secType==="UB"||secType==="UC"||secType==="UB+PFC"||secType==="UC+PFC")&&<div className="mb-3">
+             <label className="block">
+               <span className="text-[11px] font-medium text-slate-600">{secType.startsWith("UB")?"Universal Beam":"Universal Column"} (SCI P363)</span>
+               <select value={mainSec} onChange={e=>setMainSec(e.target.value)}
+                 className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-sm text-slate-900 outline-none focus:border-amber-500">
+                 {mainLib.map(s=><option key={s.n} value={s.n}>{s.n}</option>)}
+               </select>
+             </label>
+           </div>}
+
+           {/* PFC cap dropdown */}
+           {(secType==="UB+PFC"||secType==="UC+PFC")&&<div className="mb-3">
+             <label className="block">
+               <span className="text-[11px] font-medium text-slate-600">PFC cap channel — ∩ configuration (SCI P363)</span>
+               <select value={pfcSec} onChange={e=>setPfcSec(e.target.value)}
+                 className="mt-1 w-full rounded border border-slate-300 bg-white px-2 py-1.5 font-mono text-sm text-slate-900 outline-none focus:border-amber-500">
+                 {PFC.map(s=><option key={s.n} value={s.n}>{s.n}</option>)}
+               </select>
+             </label>
+             <p className="mt-1 text-[10px] text-slate-400">PFC web lies flat on UB top flange; flanges hang down as vertical legs. Inner clear width must ≥ main flange width.</p>
+           </div>}
+
+           {/* Box beam inputs */}
+           {secType==="Box"&&<div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+             <Field label="Top flange width Bt" value={box.Bt} onChange={v=>sBox("Bt",v)} unit="mm"/>
+             <Field label="Top flange thk Tt"   value={box.Tt} onChange={v=>sBox("Tt",v)} unit="mm"/>
+             <Field label="Bottom flange width Bb" value={box.Bb} onChange={v=>sBox("Bb",v)} unit="mm"/>
+             <Field label="Bottom flange thk Tb"   value={box.Tb} onChange={v=>sBox("Tb",v)} unit="mm"/>
+             <Field label="Web height Hw (clear)" value={box.Hw} onChange={v=>sBox("Hw",v)} unit="mm"/>
+             <Field label="Web thickness Tw (each)" value={box.Tw} onChange={v=>sBox("Tw",v)} unit="mm"/>
+             <Field label="Web inset s" value={box.s} onChange={v=>sBox("s",v)} unit="mm" hint="outer web face from flange edge"/>
+           </div>}
+
+           {/* Section schematic + computed properties */}
+           <div className="mb-3 flex items-start gap-3 rounded border border-slate-200 bg-slate-50 p-3">
+             <div className="w-40 shrink-0">
+               <SectionSVG secType={secType} sp={sp} box={box} mainSec={mainSec} pfcSec={pfcSec} mainLib={mainLib}/>
+             </div>
+             <div className="flex-1">
+               <div className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">Computed section properties</div>
+               <PropChips sp={sp}/>
+               {(secType==="UB"||secType==="UC")&&(()=>{
+                 const m=mainLib.find(s=>s.n===mainSec)||mainLib[0];
+                 return <p className="mt-1.5 text-[10px] text-slate-400">h={m.h} mm · b={m.b} mm · tw={m.tw} mm · tf={m.tf} mm</p>;
+               })()}
+               {(secType==="UB+PFC"||secType==="UC+PFC")&&(()=>{
+                 const m=mainLib.find(s=>s.n===mainSec)||mainLib[0];
+                 const p=PFC.find(s=>s.n===pfcSec)||PFC[0];
+                 return <p className="mt-1.5 text-[10px] text-slate-400">
+                   Main: h={m.h} b={m.b} · PFC ∩: width={p.h} legs={p.b}mm · Total depth={(m.h+p.tw).toFixed(0)} mm
+                 </p>;
+               })()}
+               {secType==="Box"&&<p className="mt-1.5 text-[10px] text-slate-400">Total depth = {box.Tt+box.Hw+box.Tb} mm · web CL at {(box.Bt/2-box.s-box.Tw/2).toFixed(0)} mm from axis</p>}
+             </div>
+           </div>
+         </div>
+
+         {/* ── Material, fatigue & checks ────────────────── */}
+         <div className="border-t border-slate-200 pt-4">
+           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Material &amp; resistance</div>
+           <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+             <Field label="Yield strength fy" value={mat.fy} onChange={v=>sMat("fy",v)} unit="N/mm²"/>
+             <Field label="γM resistance factor" value={mat.gammaM} onChange={v=>sMat("gammaM",v)} en="EN 13001-3-1 Table 3: γRm, typically 1.10 for structural steel."/>
+           </div>
+
+           <div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Fatigue — EN 13001-3-1</div>
+           <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+             <Field label="Δσc detail category" value={fat.dsc} onChange={v=>sFat("dsc",v)} unit="N/mm²" en="EN 13001-3-1 / EN 1993-1-9: detail class for the critical weld or notch."/>
+             <Field label="sₘ stress-history"   value={fat.sm}  onChange={v=>sFat("sm",v)}  en="EN 13001-3-1 §5.3: from load spectrum class S0–S9."/>
+             <Field label="m slope exponent"    value={fat.m}   onChange={v=>sFat("m",v)}   en="EN 13001-3-1: 3 for normal stress, 5 for shear."/>
+             <Field label="γMf fatigue factor"  value={fat.gammaMf} onChange={v=>sFat("gammaMf",v)} en="EN 13001-3-1 Table 4: typically 1.10 (safe-life)."/>
+           </div>
+
+           <div className="mb-3 flex items-start gap-2 rounded border border-blue-200 bg-blue-50 px-3 py-2 text-[10px] text-blue-800">
+             <Ico n="info" s={12} c="#1e40af"/>
+             <span><b>Not checked here:</b> lateral-torsional buckling (LTB), web crippling under wheel load, and plate/web panel buckling. Verify separately per EN 13001-3-1.</span>
+           </div>
+
+           {/* Underslung trolley — bottom flange check */}
+           {geo.beamCount===1&&<div className="rounded border border-slate-300 bg-slate-50 p-3">
+             <div className="mb-2 flex items-center gap-2">
+               <div className="h-2 w-2 rounded-full" style={{background:ACCENT}}/>
+               <span className="text-[11px] font-semibold text-slate-700">Underslung trolley — bottom flange bending</span>
+             </div>
+             <p className="mb-3 text-[10px] text-slate-500">
+               Single girder crane: hoist trolley runs on the bottom flange. Wheel loads create transverse bending in the flange (EN 1993-6 §5.7). Load dispersed at 30° through web height; biaxial interaction with main-beam longitudinal stress at the web–flange root.
+             </p>
+             <div className="mb-2 grid grid-cols-2 gap-3 sm:grid-cols-3">
+               <div>
+                 <div className="mb-1 text-[11px] font-medium text-slate-600">No. of trolley wheels</div>
+                 <div className="flex gap-1">
+                   {[2,4].map(n=><button key={n} onClick={()=>sTrolley("nw",n)}
+                     className={"rounded border px-3 py-1.5 text-xs font-semibold "+(trolley.nw===n?"text-white border-transparent":"border-slate-300 bg-white text-slate-500")}
+                     style={trolley.nw===n?{background:STEEL}:{}}>{n}</button>)}
+                 </div>
+               </div>
+               <Field label="Wheel gauge g (CL–CL)" value={trolley.g} onChange={v=>sTrolley("g",v)} unit="mm"
+                 hint={"Flange b="+fmt(bfDims.b,0)+"mm · web tw="+fmt(bfDims.tw,1)+"mm"}/>
+               <Field label="Wheel contact length aₛ" value={trolley.as} onChange={v=>sTrolley("as",v)} unit="mm"
+                 hint="Along beam — typically 40–80 mm"/>
+             </div>
+             {R.flangeWarn&&<div className="flex items-start gap-1.5 rounded border border-red-200 bg-red-50 px-2 py-1.5 text-[10px] text-red-700">
+               <Ico n="alert" s={11} c="#b91c1c"/>{R.flangeWarn}
+             </div>}
+             {!R.flangeWarn&&<div className="rounded bg-white border border-slate-200 px-2 py-1.5 font-mono text-[10px] text-slate-500 space-y-0.5">
+               <div>Fw = {fmt(R.Fw_fl/1000,2)} kN per wheel · cf = {fmt(R.cf,0)} mm · l_eff = {fmt(R.leff_fl,0)} mm</div>
+               <div>σ_trans = {fmt(R.sigTrans,1)} N/mm² · σ_x = {fmt(R.sigX,1)} N/mm² · σ_eq = {fmt(Math.sqrt(R.sigX**2+R.sigTrans**2-R.sigX*R.sigTrans),1)} N/mm²</div>
+             </div>}
+           </div>}
+         </div>
+
+       </div>}
+
+       {tab==="fac"&&<div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+         <Field label="φ₁ dead-load vibration" value={fac.phi1} onChange={v=>sFac("phi1",v)} en="EN 13001-2 §2.7.1: dynamic effect on crane self-mass. Typical 1.05–1.10."/>
+         <Field label="φ₂ hoist-load factor"   value={fac.phi2} onChange={v=>sFac("phi2",v)} en="EN 13001-2 §2.7.2: φ₂ = φ₂min + β₂·vₕ. Depends on hoisting class HC1–HC4 and hoist speed vₕ."/>
+         <Field label="φ₄ rail unevenness"      value={fac.phi4} onChange={v=>sFac("phi4",v)} en="EN 13001-2: 1.0 for continuously welded/ground rails under stated tolerance."/>
+         <Field label="φ₅ drive acceleration"   value={fac.phi5} onChange={v=>sFac("phi5",v)} en="EN 13001-2 §2.7.5: 1.0 (smooth) to 2.0 (step change). Applied to horizontal drive forces."/>
+         <Field label="φ₇ buffer elastic factor" value={fac.phi7} onChange={v=>sFac("phi7",v)} en="EN 13001-2 §2.7.7: energy absorption factor for buffers. Typically 1.25 polyurethane."/>
+       </div>}
+
+       {tab==="hz"&&<div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+         <Field label="Long-travel acceleration" value={hz.aLong} onChange={v=>sHz("aLong",v)} unit="m/s²" hint="crane bridge travel"/>
+         <Field label="Cross-travel acceleration" value={hz.aCross} onChange={v=>sHz("aCross",v)} unit="m/s²" hint="trolley travel"/>
+         <Field label="Buffer force (per side)" value={hz.buffer} onChange={v=>sHz("buffer",v)} unit="kN" hint="×φ₇ in combo C"/>
+         <div className="col-span-2 mt-1 border-t border-dashed border-slate-200 pt-2 text-[10px] font-semibold uppercase tracking-wide text-slate-400 sm:col-span-3">Skewing — EN 15011 Annex D</div>
+         <Field label="Skew angle α" value={hz.alpha} onChange={v=>sHz("alpha",v)} unit="rad" en="EN 15011: α = αg+αw+αt ≤ 0.015 rad."/>
+         <Field label="λ distribution factor" value={hz.lambda} onChange={v=>sHz("lambda",v)} en="EN 15011 Table D.1: from wheel/guidance geometry."/>
+         <Field label="f override (blank = auto)" value={hz.fOver} onChange={v=>sHz("fOver",v)} en="f = 0.3(1−e^(−250α)) ≤ 0.3" hint={"auto f = "+fmt(R.fSkew,4)}/>
+       </div>}
+
+       {tab==="comb"&&<div className="space-y-3">
+         <p className="text-[11px] text-slate-500">Three EN 13001-2 load combinations. γG and γL are partial safety factors — verify against your edition.</p>
+         {combos.map((c,i)=><div key={i} className="rounded border border-slate-200 p-3">
+           <input value={c.name} onChange={e=>upCombo(i,"name",e.target.value)}
+             className="mb-2 w-full border-b border-slate-200 bg-transparent text-xs font-bold text-slate-800 outline-none focus:border-amber-500"/>
+           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+             <Field label="γG crane mass" value={c.gG} onChange={v=>upCombo(i,"gG",v)} en="EN 13001-2: partial safety factor for crane self-mass."/>
+             <Field label="γL hoist load"  value={c.gL} onChange={v=>upCombo(i,"gL",v)} en="EN 13001-2: partial safety factor for hoist load."/>
+             <div className="col-span-2 grid grid-cols-2 gap-x-2 gap-y-1.5 pt-1 text-[10px] text-slate-600">
+               {[["phi2","apply φ₂"],["phi4","apply φ₄"],["travel","travel inertia"],["skew","skewing"],["buffer","buffer"]].map(([k,l])=>
+                 <label key={k} className="flex cursor-pointer items-center gap-1.5">
+                   <input type="checkbox" checked={c[k]} onChange={e=>upCombo(i,k,e.target.checked)} className="accent-amber-600"/>{l}
+                 </label>)}
+             </div>
+           </div>
+           <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 rounded bg-slate-50 px-2 py-1.5 font-mono text-[10px] text-slate-500">
+             <span>Pᵥ=<b className="text-slate-800">{fmt(R.rows[i].Pv/1000,2)} kN</b></span>
+             <span>Hₜ=<b className="text-slate-700">{fmt(R.rows[i].Ht/1000,2)} kN</b></span>
+             <span>Hₗ={fmt(R.rows[i].Hl/1000,2)} kN</span>
+             {R.rows[i].Hbuf>0&&<span>Fbuf={fmt(R.rows[i].Hbuf/1000,1)} kN</span>}
+           </div>
+         </div>)}
+       </div>}
+
+
+      </div>
+     </div>
+
+     {/* Results */}
+     <div className="lg:col-span-1"><div className="sticky top-4 space-y-3">
+
+       <div className="rounded p-4 text-white" style={{background:STEEL}}>
+         <div className="flex items-center justify-between">
+           <span className="text-[11px] font-semibold uppercase tracking-wide text-slate-300">Governing utilisation</span>
+           {govU<=1?<Ico n="check" s={18} c="#4ade80"/>:<Ico n="x" s={18} c="#f87171"/>}
+         </div>
+         <div className="mt-1 font-mono text-3xl font-bold" style={{color:govU<=1?"#4ade80":"#f87171"}}>
+           {fmt(govU*100,1)}<span className="text-base text-slate-400">%</span>
+         </div>
+         <div className="mt-1 text-[10px] text-slate-400">{govU<=1?"All checks pass":"Exceeds capacity — revise"}</div>
+         <div className="mt-3 grid grid-cols-2 gap-1 text-center">
+           {[["Bending",R.uBending],["Shear",R.uShear],["Fatigue",R.uFat],["Deflection",R.uDefl],
+             ...(geo.beamCount===1&&!R.flangeWarn?[["Flange",R.uFlangeCombo]]:[])
+           ].map(([l,u])=>
+             <div key={l} className="rounded bg-slate-700 px-1 py-1">
+               <div className="text-[9px] text-slate-400">{l}</div>
+               <div className="font-mono text-[11px] font-bold" style={{color:u<=1?"#86efac":"#fca5a5"}}>{fmt(u*100,0)}%</div>
+             </div>)}
+         </div>
+       </div>
+
+       <div className="rounded bg-white p-4 shadow-sm">
+         <h3 className="mb-2 flex items-center gap-1.5 text-xs font-bold text-slate-700"><Ico n="boxes" s={14} c={ACCENT}/> Wheel loads</h3>
+         <dl className="space-y-1 font-mono text-[11px]">
+           <Row k="Max vertical Pv" v={fmt(R.P/1000,2)+" kN"} bold/>
+           <Row k="Min vertical (char.)" v={fmt(R.pMin/1000,2)+" kN"}/>
+           <Row k="Transverse Ht" v={fmt(R.H/1000,2)+" kN"}/>
+           <Row k="Longitudinal Hl/wheel" v={fmt(R.hLongWheel/1000,2)+" kN"}/>
+           <Row k="Governing combo" v={R.govV.name.split(" ")[0]}/>
+         </dl>
+       </div>
+
+       <div className="rounded bg-white p-4 shadow-sm">
+         <h3 className="mb-2 flex items-center gap-1.5 text-xs font-bold text-slate-700"><Ico n="gauge" s={14} c={ACCENT}/> Runway beam effects</h3>
+         <dl className="space-y-1 font-mono text-[11px]">
+           <Row k="Max moment Mx" v={fmt(R.Mx/1000,2)+" kNm"} bold/>
+           <Row k="Lateral moment My" v={fmt(R.My/1000,2)+" kNm"}/>
+           <Row k="Max shear V" v={fmt(R.Vmax/1000,2)+" kN"}/>
+           <Row k="Max reaction R" v={fmt(R.Rmax/1000,2)+" kN"}/>
+         </dl>
+         <BeamSVG a={geo.a} Lb={geo.Lb}/>
+       </div>
+
+       <div className="rounded bg-white p-4 shadow-sm">
+         <h3 className="mb-3 flex items-center gap-1.5 text-xs font-bold text-slate-700"><Ico n="check" s={14} c={ACCENT}/> Proof of competence</h3>
+         <div className="space-y-3">
+           <Util label="Bending σ/f_Rd" detail={"σ="+fmt(R.sigTot,1)+" / f_Rd="+fmt(R.fRd,1)+" N/mm²"} u={R.uBending}/>
+           <Util label="Shear τ/τ_Rd"   detail={"τ="+fmt(R.tau,1)+" / τ_Rd="+fmt(R.tauRd,1)+" N/mm²"} u={R.uShear}/>
+           <Util label="Fatigue Δσ/Δσ_Rd" detail={"Δσ="+fmt(R.dSig,1)+" / Δσ_Rd="+fmt(R.dSigRd,1)+" N/mm²"} u={R.uFat}/>
+           <Util label="Deflection δ/δ_lim" detail={"δ="+fmt(R.delta_mm,2)+"mm / lim="+fmt(R.deltaLim,1)+"mm (L/600)"} u={R.uDefl}/>
+           {geo.beamCount===1&&!R.flangeWarn&&<Util
+             label="Flange bending σ_eq/f_Rd"
+             detail={"σ_trans="+fmt(R.sigTrans,1)+" σ_x="+fmt(R.sigX,1)+" → σ_eq="+fmt(Math.sqrt(R.sigX**2+R.sigTrans**2-R.sigX*R.sigTrans),1)+" N/mm²"}
+             u={R.uFlangeCombo}/>}
+           {geo.beamCount===1&&R.flangeWarn&&<div className="rounded border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] text-amber-800">
+             <b>Flange check:</b> {R.flangeWarn}
+           </div>}
+         </div>
+         <div className="mt-3 rounded bg-slate-50 px-2 py-1.5 font-mono text-[10px] text-slate-500 space-y-0.5">
+           <div>σx={fmt(R.sigX,1)} σy={fmt(R.sigY,1)} τ={fmt(R.tau,1)} N/mm²</div>
+           <div>Wx={fmt(sp.Wx,0)} Wy={fmt(sp.Wy,0)} Aweb={fmt(sp.Aweb,1)} Ix={fmt(sp.Ix,0)}</div>
+         </div>
+       </div>
+
+     </div></div>
+    </div>
+
+    <p className="mt-4 text-center text-[10px] text-slate-400">
+      Calculation aid only · not a substitute for engineering judgement · verify EN-tagged inputs and section data against your licensed SCI P363 edition
+    </p>
+   </div>
+  </div>);
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>

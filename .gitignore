@@ -1,0 +1,15 @@
+# Claude Code local (per-developer) settings — keep shared config, ignore local overrides
+**/.claude/settings.local.json
+
+# OS / editor cruft
+Thumbs.db
+desktop.ini
+.DS_Store
+*~
+.vscode/
+.idea/
+
+# Dependencies / build output (if any tool later adds a build step)
+node_modules/
+dist/
+build/
