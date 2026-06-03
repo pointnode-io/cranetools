@@ -1,72 +1,53 @@
 # cranedrivesizer
 
-A single-file tool that **sizes the drive** for the three crane mechanisms —
-**hoist**, **long-travel** and **cross-travel** — from the physical duty.
+**One tool — pick the motion** (Hoist / Long-travel / Cross-travel) and size the
+**motor, gearbox and brake** for a crane drive. Single self-contained HTML file.
 
 ## Files
 
 - **`crane-drive-sizer.html`** — interactive React app. Open directly in a
   browser; no build, no server (React 18 + Babel + Tailwind from CDN).
 
-## What it does
+## Tabs
 
-Pick a mechanism tab and enter the duty. For each, it returns:
+### Hoist (deep serial-hoist sizer)
+Static / dynamic / peak / **RMS** torque & power, drum torque, regen on lowering;
+**speed-match** gear ratio (recommended) and inertia-match `i_opt`; motor **stall
+margin** and **thermal utilisation**; **S1-continuous or %ED** duty; the holding
+**brake** (factor on rated motor torque, **125% proof-load** hold and static-load
+checks); **VFD** acceleration and the **87 Hz technique** (delta) with its
+suitability checks; and the geared-motor / gearbox **service-factor** outputs.
 
-| Output | Hoist | Travel (LT / CT) |
-|---|---|---|
-| Required motor power (steady + peak) | ✓ | ✓ |
-| Motor torque (steady + acceleration) | ✓ | ✓ |
-| Gearbox ratio `i = n_motor / n_out` | ✓ | ✓ |
-| Minimum brake torque | ✓ | ✓ |
-| **Next standard motor** (IEC ladder) + breakdown-torque margin | ✓ | ✓ |
-| **Geared-motor spec** (n₂, ratio, output torque T₂N/T₂B, fₛ, radial load) for SEW/Nord/Demag | ✓ | ✓ |
-| Drives-per-mechanism load sharing | ✓ | ✓ |
-| Drum speed & lead-line rope pull | ✓ | — |
-| **Reeving** efficiency (derived from sheaves) + ratio | ✓ | — |
-| **Rope safety** `MBL/S ≥ Z_p` and **drum D/d ≥ min** PASS/FAIL | ✓ | — |
-| Hoisting **dynamic factor φ₂** (EN 13001-2) | ✓ | — |
-| Optional **counterweight** (with overhauling/brake handling) | ✓ | — |
-| Resisting forces (rolling / gradient / wind) | — | ✓ |
-| **Anti-skid (drive) check** — tractive demand vs wheel/rail adhesion | — | ✓ |
-| **VFD acceleration** — achievable accel = min(skid, torque) limited | ✓ | ✓ |
-| Regen energy/power (decel & lowering → brake-resistor sizing) | ✓ | ✓ |
-| Required deceleration & stopping distance | — | ✓ |
-| **Indicative duty/energy** — RMS power, %ED, kWh & running cost | ✓ | ✓ |
+### Long-travel / Cross-travel
+Running resistance (bearing+rolling or specific), the **anti-skid drive check**
+(tractive demand vs wheel/rail adhesion, with achievable accel = min of skid- and
+torque-limited), VFD acceleration with **regen**, braking / stopping distance, and
+a geared-motor spec (n₂, ratio, output torque, fₛ, wheel radial load).
 
-The **anti-skid check** is the headline travel result: it confirms the driven
-wheels can transmit the acceleration force without slipping (and flags if the
-brake would lock the wheels). Inputs are grouped into collapsible sections so the
-core sizing stays front-and-centre and the advanced options (reeving/rope, VFD,
-duty cycle) expand on demand.
+## Key behaviours
 
-> **Motor pick is acceleration-aware.** Travel motors are sized on the *greater*
-> of the continuous demand and the peak-torque demand ÷ usable overload — sizing
-> on steady running alone would pick a frame too small to accelerate the mass.
-
-## How it fits the toolkit
-
-This is the complement to the [Hoist Duty Calculator](../hoistdutycalculator/),
-which classifies the mechanism duty group but stops short of sizing the motor
-(it names **FEM 9.683** as the source). This tool picks up from there.
+- **Won't undersize, won't pad.** Required power is the true demand (governing
+  larger of duty and thermal-RMS); the recommendation is the **smallest IEC frame
+  that meets it**, with the entered motor checked PASS/FAIL against the requirement.
+- **Multiple drives → per drive.** With N drives the load is split equally;
+  motor / gearbox / brake figures are shown **per drive** with the **combined
+  (× N)** total. A banner states this on each tab.
+- **Hoist brake** = holding-brake factor (default 2.0 × rated motor torque) and
+  must also pass the 125% proof-load and static-load checks (worst case wins).
+  **Travel brake** = sized for deceleration / stopping distance and must not
+  exceed adhesion (no holding factor).
 
 ## Engineering basis
 
-Two kinds of value, clearly separated in the app:
+Exact mechanics are computed; **coefficients** (adhesion, rolling resistance,
+wind, brake / proof / overload / service factors, %ED, 87 Hz `k`) are **editable
+"confirm" defaults** — published figures differ by standard/edition. `g = 9.81
+m/s²`. Mechanism **duty group** → use the [Hoist Duty Calculator](../hoistdutycalculator/).
 
-- **Kinematics & dynamics** — exact, edition-independent mechanics
-  (`P = F·v/η`, `T = 9549·P/n`, `i = n_motor/n_out`, reflected inertia,
-  `F_adh = μ·N`). These are not tunable.
-- **Empirical coefficients** — adhesion μ, rolling-resistance terms, in-service
-  wind, brake safety factor — are typical **defaults exposed as editable
-  inputs**, badged *“default — confirm”*. The governing figures depend on the
-  project, the wheel/rail or guide, and the controlling standard
-  (FEM 9.683 / EN 13135 / EN 13001-2).
-
-> **Scope:** this returns the *demanded* power, torque, ratio and *minimum*
-> brake torque — it does **not** pick a catalogue motor. Thermal selection
-> (duty %ED + permissible starts/hour, FEM 9.683) is a separate check that can
-> govern. Verify every flagged coefficient and the final selection against the
-> controlling standard before order.
+> **Scope:** a sizing & first-pass verification aid, not a catalogue selector or
+> compliance certificate. Verify the final motor / gearbox / brake / inverter
+> against the supplier's data and the controlling standard
+> (EN 14492-2 / EN 13001 / EN 13135) before order.
 
 ## Usage
 
