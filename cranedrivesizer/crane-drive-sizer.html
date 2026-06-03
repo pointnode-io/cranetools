@@ -104,6 +104,16 @@ const Pill=({ok,children})=>(
 const Toggle=({on,onClick,children})=>(
   <button onClick={onClick} className={"text-xs px-2 py-1 rounded border "+(on?"bg-amber-500 text-white border-amber-500":"bg-white text-slate-600 border-slate-300")}>{children}</button>
 );
+// speed field with m/min ↔ m/s display toggle (value stored internally as m/min)
+const SpeedField=({label,unit,vMin,onMin})=>{
+  const disp = unit==="m/s" ? (vMin==="" ? "" : Math.round((vMin/60)*1000)/1000) : vMin;
+  return (
+    <Field label={label} hint={unit}>
+      <Num value={disp} min="0" step={unit==="m/s"?0.05:0.5}
+        onChange={e=>{const x=e.target.value; onMin(x===""?"":(unit==="m/s"?(+x*60):+x));}}/>
+    </Field>
+  );
+};
 // collapsible input group
 const Group=({title,open,children})=>(
   <details open={open} className="border border-slate-200 rounded-lg mb-3">
@@ -339,6 +349,7 @@ function ScopeNote(){
 // ════════════════════════════════════════════════════════════════════════════
 function App(){
   const [tab,setTab]=useState("hoist");
+  const [spdUnit,setSpdUnit]=useState("m/min");
   const [customer,setCustomer]=useState("");
   const [quoteNo,setQuoteNo]=useState("");
   const [dateStr,setDateStr]=useState("");
@@ -400,19 +411,24 @@ function App(){
       </div>
 
       <div className="max-w-6xl mx-auto px-5 pt-5 no-print">
-        <div className="flex gap-1">
+        <div className="flex gap-1 items-center">
           {TABS.map(([id,label])=>(
             <button key={id} onClick={()=>setTab(id)}
               className={"px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 "+
                 (tab===id?"bg-white text-slate-800 border-slate-200":"bg-slate-200 text-slate-500 border-transparent hover:bg-slate-300")}>{label}</button>
           ))}
+          <div className="ml-auto flex items-center gap-1 text-xs text-slate-500">
+            <span>Speed:</span>
+            <Toggle on={spdUnit==="m/min"} onClick={()=>setSpdUnit("m/min")}>m/min</Toggle>
+            <Toggle on={spdUnit==="m/s"} onClick={()=>setSpdUnit("m/s")}>m/s</Toggle>
+          </div>
         </div>
       </div>
 
       <div className="max-w-6xl mx-auto px-5 pb-6">
-        {tab==="hoist" && <HoistTab h={h} set={setH1} r={rH}/>}
-        {tab==="lt"    && <TravelTab t={lt} set={mkSet(setLt,lt)} r={rLT} title="Long-travel (bridge / gantry on the runway)" massHint="whole crane + trolley + rated load"/>}
-        {tab==="ct"    && <TravelTab t={ct} set={mkSet(setCt,ct)} r={rCT} title="Cross-travel (trolley / crab on the bridge)" massHint="trolley/crab + rated load"/>}
+        {tab==="hoist" && <HoistTab h={h} set={setH1} r={rH} unit={spdUnit}/>}
+        {tab==="lt"    && <TravelTab t={lt} set={mkSet(setLt,lt)} r={rLT} unit={spdUnit} title="Long-travel (bridge / gantry on the runway)" massHint="whole crane + trolley + rated load"/>}
+        {tab==="ct"    && <TravelTab t={ct} set={mkSet(setCt,ct)} r={rCT} unit={spdUnit} title="Cross-travel (trolley / crab on the bridge)" massHint="trolley/crab + rated load"/>}
       </div>
 
       <div className="max-w-6xl mx-auto px-5 pb-10">
@@ -467,7 +483,7 @@ function App(){
 }
 
 // ── HOIST tab ─────────────────────────────────────────────────────────────────
-function HoistTab({h,set,r}){
+function HoistTab({h,set,r,unit}){
   return (
     <div className="bg-white rounded-b-lg rounded-tr-lg shadow-sm border border-slate-200 p-5 grid md:grid-cols-2 gap-6">
       <div>
@@ -475,7 +491,7 @@ function HoistTab({h,set,r}){
           <div className="grid grid-cols-2 gap-x-4">
             <Field label="Rated load (SWL)" hint="kg"><Num value={h.mLoad} min="0" step="50" onChange={e=>set("mLoad",e.target.value)}/></Field>
             <Field label="Bottom block / tackle" hint="kg"><Num value={h.mTackle} min="0" step="10" onChange={e=>set("mTackle",e.target.value)}/></Field>
-            <Field label="Hoisting speed" hint="m/min"><Num value={h.vh} min="0" step="0.5" onChange={e=>set("vh",e.target.value)}/></Field>
+            <SpeedField label="Hoisting speed" unit={unit} vMin={h.vh} onMin={v=>set("vh",v)}/>
             <Field label="Counterweight" hint="kg, 0 = none"><Num value={h.mCw} min="0" step="50" onChange={e=>set("mCw",e.target.value)}/></Field>
             <Field label="Drum diameter" hint="mm, pitch dia"><Num value={h.Dd} min="0" step="10" onChange={e=>set("Dd",e.target.value)}/></Field>
             <Field label="Motor base speed" hint="rpm"><Num value={h.nMot} min="0" step="10" onChange={e=>set("nMot",e.target.value)}/></Field>
@@ -622,14 +638,15 @@ function HoistTab({h,set,r}){
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-5 print-block">
-          <h2 className="font-bold text-slate-800 mb-2">Brake &amp; VFD</h2>
+          <h2 className="font-bold text-slate-800 mb-2">Holding brake &amp; VFD</h2>
           <dl className="grid grid-cols-2 gap-y-2 text-sm">
-            <Row k="Static load torque (motor shaft)" unit="N·m" v={fmt(r.Tload,1)}/>
-            <Row k={"Min. brake torque ("+fmt(h.brakeSF,1)+"×)"} unit="N·m" v={fmt(r.Tbrake,1)} strong badge={{t:"EN 13135",tone:""}}/>
+            <Row k="Static LOAD torque (motor shaft)" unit="N·m" v={fmt(r.Tload,1)} badge={{t:"gravity, lossless",tone:""}}/>
+            <Row k={"Min. brake torque = "+fmt(h.brakeSF,2)+" × load"} unit="N·m" v={fmt(r.Tbrake,1)} strong badge={{t:"EN 13135 / EN 14492-2",tone:""}}/>
+            {r.motorKW&&<Row k="(for reference: × motor rated)" unit="×" v={fmt(r.Tbrake/r.Trated,2)}/>}
             {h.vfd&&<Row k="Torque-limited max accel" unit="m/s²" v={fmt(r.aTq,2)} badge={{t:"VFD",tone:""}}/>}
             {h.vfd&&<Row k="Steady lowering regen" unit="kW" v={fmt(r.PregenLower,2)} badge={{t:"→ resistor",tone:""}}/>}
           </dl>
-          <p className="text-xs text-slate-400 mt-2">Brake torque at the motor shaft (×i for a drum-shaft brake); counterweight is not credited for holding (conservative).</p>
+          <p className="text-xs text-slate-400 mt-2">Brake is sized as a factor (≈1.5–2.0, project/standard-dependent) on the <b>static load torque from gravity</b> — <b>not</b> on motor torque — computed lossless (gearbox friction would only help hold) at the motor shaft (×i for a drum-shaft brake). Counterweight is not credited. For dual-brake or dangerous-load (e.g. molten metal) duties each brake / the system factor is higher — confirm against the controlling standard.</p>
         </div>
 
         {h.cycEnable&&r.cyc&&(
@@ -638,6 +655,7 @@ function HoistTab({h,set,r}){
             <dl className="grid grid-cols-2 gap-y-2 text-sm">
               <Row k="RMS motor torque" unit="N·m" v={fmt(r.cyc.Trms,1)}/>
               <Row k="RMS continuous power" unit="kW" v={fmt(r.cyc.Prms,2)} strong/>
+              {r.motorKW&&<Row k="vs selected motor rating" unit="" v={r.cyc.Prms<=r.motorKW?"OK — within kW":"RMS > motor kW — uprate"}/>}
               <Row k="Duty %ED" unit="%" v={fmt(r.cyc.ed,0)}/>
               <Row k="Implied starts / hour" unit="" v={fmt0(r.cyc.startsHr)}/>
               <Row k="Energy / cycle" unit="kWh" v={fmt(r.cyc.EgridCycle/3600,3)}/>
@@ -654,7 +672,7 @@ function HoistTab({h,set,r}){
 }
 
 // ── TRAVEL tab ────────────────────────────────────────────────────────────────
-function TravelTab({t,set,r,title,massHint}){
+function TravelTab({t,set,r,title,massHint,unit}){
   const skidOK=isFinite(r.uSkid)&&r.uSkid<=1;
   const skidBOK=isFinite(r.uSkidB)&&r.uSkidB<=1;
   return (
@@ -664,7 +682,7 @@ function TravelTab({t,set,r,title,massHint}){
           <p className="text-xs text-slate-400 mb-2">Mass = {massHint}.</p>
           <div className="grid grid-cols-2 gap-x-4">
             <Field label="Total moving mass" hint="kg"><Num value={t.m} min="0" step="100" onChange={e=>set("m",e.target.value)}/></Field>
-            <Field label="Travel speed" hint="m/min"><Num value={t.v} min="0" step="1" onChange={e=>set("v",e.target.value)}/></Field>
+            <SpeedField label="Travel speed" unit={unit} vMin={t.v} onMin={v=>set("v",v)}/>
             <Field label="Total wheels"><Num value={t.nW} min="1" step="1" onChange={e=>set("nW",e.target.value)}/></Field>
             <Field label="Driven wheels"><Num value={t.nD} min="1" step="1" onChange={e=>set("nD",e.target.value)}/></Field>
             <Field label="Wheel diameter" hint="mm"><Num value={t.Dw} min="0" step="10" onChange={e=>set("Dw",e.target.value)}/></Field>
@@ -823,6 +841,7 @@ function TravelTab({t,set,r,title,massHint}){
             <dl className="grid grid-cols-2 gap-y-2 text-sm">
               <Row k="RMS motor torque" unit="N·m" v={fmt(r.cyc.Trms,1)}/>
               <Row k="RMS continuous power" unit="kW" v={fmt(r.cyc.Prms,2)} strong/>
+              {r.motorKW&&<Row k="vs selected motor rating" unit="" v={r.cyc.Prms<=r.motorKW?"OK — within kW":"RMS > motor kW — uprate"}/>}
               <Row k="Duty %ED" unit="%" v={fmt(r.cyc.ed,0)}/>
               <Row k="Implied starts / hour" unit="" v={fmt0(r.cyc.startsHr)}/>
               <Row k="Energy / cycle" unit="kWh" v={fmt(r.cyc.EgridCycle/3600,3)}/>
