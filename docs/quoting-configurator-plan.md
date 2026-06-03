@@ -89,20 +89,22 @@ Quote {
   spec: CraneSpec
   engineResults { weightT, dutyGroup, installedKW, driveSelections }
   lines: QuoteLine[]
-  commercials { steelRatePerT, overheadPct, marginPct }
-  totals { steelwork, boughtOut, labour, overhead, margin, price }
+  commercials { steelRatePerT, marginSteel, marginByCategory{...} }   // overhead baked into margins
+  totals { steelwork, boughtOut, labour, delivery, price }            // no separate overhead line
   outcome { wonLost, actualOutturn? }            // calibration feedback
 }
 QuoteLine {
-  category, description, source,   // source: catalog | manual | parametric
-  catalogItemId?, qty, unitCost, total, note
+  category, description, source,   // catalog | manual | parametric
+  catalogItemId?, qty, unitCost, cost, marginPct, sell, note
+  // labour lines: marginPct = 0 (at cost); margin incl. overhead recovery
 }
 ```
 
 ### 3.4 Commercial settings (Supabase)
-`£/t of fabrication`, labour rates, install day rate, overhead %, margin %,
-quote-doc boilerplate (inclusions, exclusions, lead time, validity, payment
-terms, T&Cs), company header. Maintained once.
+`£/t of fabrication`, labour rates, install day rate, **per-category margins**
+(overhead baked in; labour margin = 0), quote-doc boilerplate (inclusions,
+exclusions, lead time, validity, payment terms, T&Cs), company header.
+Maintained once.
 
 ## 4. Cost model (confirmed)
 **Margin is a per-line-item markup on cost — NOT a single blanket %. Labour is
