@@ -153,7 +153,8 @@ known). Periodically tune `£/t`, margin and parametric curves from outcomes. Th
 ## 9. Open items / TBD
 - Confirm Crane Spec fields per type.
 - Catalog schema attributes per category + matching rules.
-- Quote scope: single crane vs project (multiple cranes / options / spares).
+- ~~Quote scope: single crane vs project~~ → **one quote = one crane for now**
+  (Quote holds a single CraneSpec; multi-crane/project + options/spares deferred).
 - Margin: single % vs varies by type/risk.
 - Quote revisions/versioning; currency/VAT; roles/permissions.
 - Weight models for double-girder / gantry / jib.
@@ -170,3 +171,4 @@ known). Periodically tune `£/t`, margin and parametric curves from outcomes. Th
 - Quoting configurator = web app on Supabase (auth, catalog, saved quotes);
   calculators standalone and feeding it; quotes persisted → calibration loop.
 - Engine logic to be extracted into reusable pure modules shared by both.
+- One quote = one crane for now (single CraneSpec); multi-crane/project deferred.
