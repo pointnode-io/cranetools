@@ -118,6 +118,10 @@ function compute(x){
   const I_inv_req=x.hz87?Math.sqrt(3)*(x.I_motor_rated||0):(x.I_motor_rated||0); // inverter current, A
   const P_motor_rec=pickMotorUp((P_motor_req/1000)/k87);           // nameplate frame to buy (gives ×k power)
   const power_ok=isFinite(Pcap)&&Pcap>=P_motor_req/1000;
+  // 87 Hz suitability (only meaningful when hz87): computed speed & inverter-current checks
+  const hz87_speed_ok=(x.n_motor_max||0)>=Math.max(nBaseEff,isFinite(n_motor_rpm)?n_motor_rpm:0);
+  const hz87_invI_ok=(x.I_inverter||0)>=I_inv_req;
+  const hz87_ok=hz87_speed_ok&&hz87_invI_ok&&!!x.hz87_dualvolt&&!!x.hz87_cooling;
   const thermalUtil=isFinite(M_rms)&&x.M_motor_rated>0?M_rms/x.M_motor_rated:NaN;
   const thermal_ok=isFinite(thermalUtil)&&thermalUtil<=1;
   const ed_ok=isFinite(ED)&&ED<=(x.motor_ED||0);
@@ -153,7 +157,7 @@ function compute(x){
   return {mLoad,mStat,mDyn,P_static,P_dynamic,P_total,P_regen,M_drum_static,M_drum_dynamic,M_drum_total,n_load,
     J_load,i_opt,fB,fB_ok,gbTorqueReq,gbTorque_ok,n_motor_rpm,M_motor_static,M_motor_dyn,M_motor_peak,M_motor_lower,
     M_rms,ED,stallMargin,stall_ok,motorRatedKW,P_duty,P_motor_req,P_motor_rec,power_ok,thermalUtil,thermal_ok,ed_ok,
-    k87,f87,nBaseEff,Pcap,I_inv_req,
+    k87,f87,nBaseEff,Pcap,I_inv_req,hz87_speed_ok,hz87_invI_ok,hz87_ok,
     M_load_motor,M_load_proof,req_2x,req_proof,req_static,brakeReq,brake_2x_ok,brake_proof_ok,brake_static_ok,
     load_proof,load_over,warns};
 }
@@ -212,7 +216,8 @@ function App(){
     M_brake_rated:160,brakeFactor:2.0,proofFactor:1.25,overloadFactor:1.10,
     t_hoist:20,t_lower:20,t_rest:20,kCool:0.33,stallFactor:1.3,
     control:"vector",fieldWeak:false,
-    hz87:false,V_supply:400,V_delta:230,f_base:50,I_motor_rated:15});
+    hz87:false,V_supply:400,V_delta:230,f_base:50,I_motor_rated:15,
+    n_motor_max:3000,I_inverter:30,hz87_dualvolt:false,hz87_cooling:false});
   const set=(k,val)=>setX({...x,[k]:(typeof val==="boolean"||typeof val==="string")?val:(val===""?"":Number(val))});
   const r=useMemo(()=>compute(x),[x]);
 
@@ -290,11 +295,17 @@ function App(){
               <input type="checkbox" checked={x.hz87} onChange={e=>set("hz87",e.target.checked)}/> 87 Hz technique (delta) — extend speed &amp; power
             </label>
             {x.hz87&&(
-              <div className="grid grid-cols-2 gap-x-4 mt-1">
-                <Field label="Supply voltage" hint="V (VFD output)"><Num value={x.V_supply} min="0" step="10" onChange={e=>set("V_supply",e.target.value)}/></Field>
-                <Field label="Motor delta voltage" hint="V (lower of Δ/Y)"><Num value={x.V_delta} min="0" step="5" onChange={e=>set("V_delta",e.target.value)}/></Field>
-                <Field label="Base frequency" hint="Hz"><Num value={x.f_base} min="0" step="1" onChange={e=>set("f_base",e.target.value)}/></Field>
-                <Field label="Motor rated (star) current" hint="A, nameplate"><Num value={x.I_motor_rated} min="0" step="0.5" onChange={e=>set("I_motor_rated",e.target.value)}/></Field>
+              <div className="mt-1">
+                <div className="grid grid-cols-2 gap-x-4">
+                  <Field label="Supply voltage" hint="V (VFD output)"><Num value={x.V_supply} min="0" step="10" onChange={e=>set("V_supply",e.target.value)}/></Field>
+                  <Field label="Motor delta voltage" hint="V (lower of Δ/Y)"><Num value={x.V_delta} min="0" step="5" onChange={e=>set("V_delta",e.target.value)}/></Field>
+                  <Field label="Base frequency" hint="Hz"><Num value={x.f_base} min="0" step="1" onChange={e=>set("f_base",e.target.value)}/></Field>
+                  <Field label="Motor rated (star) current" hint="A, nameplate"><Num value={x.I_motor_rated} min="0" step="0.5" onChange={e=>set("I_motor_rated",e.target.value)}/></Field>
+                  <Field label="Motor max speed" hint="rpm, permissible"><Num value={x.n_motor_max} min="0" step="100" onChange={e=>set("n_motor_max",e.target.value)}/></Field>
+                  <Field label="Inverter rated current" hint="A, output"><Num value={x.I_inverter} min="0" step="1" onChange={e=>set("I_inverter",e.target.value)}/></Field>
+                </div>
+                <label className="flex items-center gap-2 text-sm text-slate-700 mb-1"><input type="checkbox" checked={x.hz87_dualvolt} onChange={e=>set("hz87_dualvolt",e.target.checked)}/> Motor is dual-voltage (Δ/Y), delta V = supply</label>
+                <label className="flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={x.hz87_cooling} onChange={e=>set("hz87_cooling",e.target.checked)}/> Cooling &amp; bearings/balancing OK at higher speed</label>
               </div>
             )}
           </Group>
@@ -387,6 +398,22 @@ function App(){
                 <Row k="Required inverter current" unit="A" v={fmt(r.I_inv_req,1)} strong badge={{t:"√3 × rated",tone:""}}/>
               </dl>
               <p className="text-xs text-slate-500 mt-2">Rated torque is held to the 87 Hz base speed, so <b>torque (rated / peak / stall) is unchanged</b> — only the speed range and continuous power extend (×k ≈ √3). Size the <b>inverter for the delta current</b> shown, and re-check the gear ratio and the <b>gearbox thermal rating</b> at the higher speed/power.</p>
+            </div>
+          )}
+
+          {x.hz87&&(
+            <div className="rounded-lg shadow-sm border-2 p-5 print-block" style={{borderColor:r.hz87_ok?"#16a34a":"#dc2626",background:r.hz87_ok?"#f0fdf4":"#fef2f2"}}>
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="font-bold text-slate-800">87 Hz suitability</h2>
+                <Pill ok={r.hz87_ok}>{r.hz87_ok?"SUITABLE":"CHECK"}</Pill>
+              </div>
+              <dl className="grid grid-cols-2 gap-y-1.5 text-sm">
+                <Row k="Motor dual-voltage (Δ/Y), delta V = supply" unit="" v={x.hz87_dualvolt?"confirmed":"not confirmed"} ok={x.hz87_dualvolt}/>
+                <Row k={"Motor max speed ≥ 87 Hz base ("+fmt0(r.nBaseEff)+" rpm)"} unit="rpm" v={fmt0(x.n_motor_max)} ok={r.hz87_speed_ok}/>
+                <Row k={"Inverter current ≥ delta ("+fmt(r.I_inv_req,1)+" A)"} unit="A" v={fmt(x.I_inverter,1)} ok={r.hz87_invI_ok}/>
+                <Row k="Cooling & bearings OK at higher speed" unit="" v={x.hz87_cooling?"confirmed":"not confirmed"} ok={x.hz87_cooling}/>
+              </dl>
+              <p className="text-xs text-slate-500 mt-2">The motor must be a true dual-voltage type whose delta voltage matches the supply; its permissible speed must cover the 87 Hz base speed; and the inverter must carry the delta current. Confirm cooling (forced cooling if running rated torque at low speed) and bearing/balancing limits with the supplier.</p>
             </div>
           )}
 

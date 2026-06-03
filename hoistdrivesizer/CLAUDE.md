@@ -90,6 +90,13 @@ unchanged.** Implementation invariant:
   the 87 Hz base speed (then it is in field weakening, torque ∝ 1/f). Re-check
   the gear ratio and the **gearbox thermal rating** at the higher speed/power.
 
+**87 Hz suitability checklist** (shown & printed only when `hz87`): two computed
+checks — motor **max speed ≥ 87 Hz base speed** (input `n_motor_max`) and
+**inverter rated current ≥ delta current** (input `I_inverter` vs `√3·I_star`) —
+plus two **declared** confirmations (`hz87_dualvolt`: true dual-voltage Δ/Y motor
+with delta V = supply; `hz87_cooling`: cooling & bearings/balancing OK at speed).
+`hz87_ok` is the AND of all four.
+
 ## Scope / non-goals
 
 A sizing & first-pass verification aid. It does **not** classify duty (use the
