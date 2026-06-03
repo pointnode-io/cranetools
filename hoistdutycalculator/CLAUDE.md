@@ -44,8 +44,16 @@ is from a cited table; changing one silently changes the duty result.
 - **Km load-class bounds** (1986 Table 5): `L1 ≤ 0.125, L2 ≤ 0.25, L3 ≤ 0.50, L4 ≤ 1.00`.
 - **1986 group selection**: `M = clamp(T_index + L_class − 2, 1, 8)`
   (`T_index` 0–9, `L_class` 1–4). This reproduces ISO 4301-1:1986 **Table 6**
-  cell-for-cell — verified against the published L1/L4 rows. If you ever replace
-  the formula with an explicit matrix, it must match this.
+  cell-for-cell. Verified against **two independent reproductions** of Table 6
+  (Verlinde EN-14492 matrix; craneyt.com full grid) whose only divergences are
+  *non-overlapping* OCR artifacts — together they confirm all 40 cells, and the
+  M8-onset diagonal (T9/T8/T7/T6 for L1/L2/L3/L4) matches exactly. T-class ladder
+  and Km bounds cross-confirmed by craneyt + KPK + the primary 2016 Qp bounds
+  (which share the 0.125/0.25/0.50/1.00 upper edges). If you ever replace the
+  formula with an explicit matrix, it must match this.
+  NOTE: the 1986 ISO PDF itself is a scanned fax image (not machine-readable), so
+  the 1986 tables rest on convergent secondary sources, not a clean primary read;
+  the 2016 tables below ARE verified against primary text (iso_extract.txt).
 - **FEM↔ISO ladder**: `M1=1Dm, M2=1Cm, M3=1Bm, M4=1Am, M5=2m, M6=3m, M7=4m, M8=5m`
   (one-to-one; research-verified, beware OCR-garbled web sources rendering 1Bm as “M23”).
 - **U-class bounds** (2016 Table 2, total cycles):

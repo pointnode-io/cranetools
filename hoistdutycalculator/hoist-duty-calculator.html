@@ -8,7 +8,17 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <script src="https://cdn.tailwindcss.com"></script>
-<style>body{margin:0}select,input{appearance:auto}</style>
+<style>
+  body{margin:0}
+  select,input{appearance:auto}
+  @media print{
+    .no-print{display:none!important}
+    body{background:#fff}
+    details{display:none}            /* reference tables collapsed out of the print */
+    .print-block{break-inside:avoid}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  }
+</style>
 </head>
 <body>
 <div id="root"></div>
@@ -99,6 +109,12 @@ const Num=(props)=>(
 );
 
 function App(){
+  // project / quote stamp (record-keeping, shown on print)
+  const [customer,setCustomer]=useState("");
+  const [quoteNo,setQuoteNo]=useState("");
+  const [dateStr,setDateStr]=useState("");
+  const [preparedBy,setPreparedBy]=useState("");
+
   // utilization / kinematics
   const [Xav,setXav]=useState(6);        // mean hoisting displacement, m
   const [vav,setVav]=useState(8);        // mean hoisting speed, m/min
@@ -153,9 +169,18 @@ function App(){
       Alabel=A_LABELS[Aidx+3];
     }
 
+    // ── input sanity warnings (not standard limits, just plausibility guards) ──
+    const warns=[];
+    if(!(vav>0)) warns.push("Hoisting speed must be greater than 0.");
+    if(!(Xav>0)) warns.push("Mean hoisting height must be greater than 0.");
+    if(motionHpd>hpd+1e-9 && hpd>0) warns.push("Computed motion time ("+fmt(motionHpd,1)+" h/day) exceeds the working hours available ("+fmt(hpd,1)+" h/day) — check cycles/hour, speed or height.");
+    if(hpd>24) warns.push("Working hours per day is above 24.");
+    if(loadMode==="derive" && rows.some(r=>r.load>100)) warns.push("A load level exceeds 100% of rated — confirm this is an intended overload.");
+    if(loadMode==="derive" && derivedK==null) warns.push("Enter at least one load level with a non-zero weight.");
+
     return {t_av_min,t_av_h,cyclesPerDay,motionHpd,totalHours,totalCycles,
       K,derivedK,Lclass,Tidx,tExceeds,Mnum,fem,iso,
-      QpidxC,Uidx,uExceeds,Aidx,Alabel};
+      QpidxC,Uidx,uExceeds,Aidx,Alabel,warns};
   },[Xav,vav,cph,hpd,dpy,years,loadMode,Lpick,rows]);
 
   const setRow=(i,k,v)=>setRows(rows.map((row,j)=>j===i?{...row,[k]:v===""?"":Number(v)}:row));
@@ -173,6 +198,21 @@ function App(){
             <span className="font-semibold text-amber-300"> FEM 9.511 / ISO 4301-1:1986</span> and the current
             <span className="font-semibold text-amber-300"> ISO 4301-1:2016</span> cycle-based scheme, side by side.
           </p>
+        </div>
+      </div>
+
+      {/* project / quote stamp + print */}
+      <div className="max-w-5xl mx-auto px-5 pt-5">
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 flex flex-wrap items-end gap-3">
+          <label className="text-xs text-slate-600 flex-1 min-w-[140px]">Customer
+            <input value={customer} onChange={e=>setCustomer(e.target.value)} className="mt-0.5 w-full border border-slate-300 rounded px-2 py-1 text-sm" /></label>
+          <label className="text-xs text-slate-600 w-32">Quotation No.
+            <input value={quoteNo} onChange={e=>setQuoteNo(e.target.value)} className="mt-0.5 w-full border border-slate-300 rounded px-2 py-1 text-sm" /></label>
+          <label className="text-xs text-slate-600 w-32">Date
+            <input value={dateStr} onChange={e=>setDateStr(e.target.value)} placeholder="dd/mm/yyyy" className="mt-0.5 w-full border border-slate-300 rounded px-2 py-1 text-sm" /></label>
+          <label className="text-xs text-slate-600 w-32">Prepared by
+            <input value={preparedBy} onChange={e=>setPreparedBy(e.target.value)} className="mt-0.5 w-full border border-slate-300 rounded px-2 py-1 text-sm" /></label>
+          <button onClick={()=>window.print()} className="no-print text-sm bg-slate-700 text-white px-3 py-1.5 rounded hover:bg-slate-800">Print / PDF</button>
         </div>
       </div>
 
@@ -257,6 +297,13 @@ function App(){
 
         {/* ── RESULTS ── */}
         <div className="space-y-5">
+          {/* input sanity warnings */}
+          {r.warns.length>0 && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+              <div className="font-semibold mb-1">Check inputs</div>
+              <ul className="list-disc pl-5 space-y-0.5">{r.warns.map((w,i)=><li key={i}>{w}</li>)}</ul>
+            </div>
+          )}
           {/* derived intermediates */}
           <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-5">
             <h2 className="font-bold text-slate-800 mb-3">Derived quantities</h2>
@@ -317,6 +364,14 @@ function App(){
               </div>
             </div>
             <p className="text-xs text-slate-400 mt-3">Both results derive from the same physical inputs; the 1986 M-class is what hoist manufacturers quote, the 2016 A-class is the current standard. They are independent classifications, not a direct conversion.</p>
+          </div>
+
+          {/* scope caveat */}
+          <div className="rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm text-slate-600">
+            <span className="font-semibold text-slate-700">Mechanism duty group only.</span> This fixes the
+            classification group. It does <b>not</b> size the hoist motor — permissible starts/hour and %ED
+            (FEM 9.683) are a separate check and can govern selection on short-lift / high-cycle duties.
+            Confirm against the controlling standard and the manufacturer's selection data before order.
           </div>
         </div>
       </div>
