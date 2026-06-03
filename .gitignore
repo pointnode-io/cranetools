@@ -13,3 +13,7 @@ desktop.ini
 node_modules/
 dist/
 build/
+
+# Copyrighted standard text extracted for verification — reference only, never commit
+iso_extract.txt
+**/iso_extract.txt

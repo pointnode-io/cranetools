@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Hoist Duty Calculator — FEM 9.511 / ISO 4301-1</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>body{margin:0}select,input{appearance:auto}</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useMemo}=React;
+const ACCENT="#d97706",STEEL="#1e293b";
+const fmt=(x,dp=2)=>(x==null||!isFinite(x))?"—":Number(x).toLocaleString("en-GB",{minimumFractionDigits:dp,maximumFractionDigits:dp});
+const fmt0=(x)=>(x==null||!isFinite(x))?"—":Math.round(x).toLocaleString("en-GB");
+
+// ════════════════════════════════════════════════════════════════════════════
+//  ENGINEERING DATA — verified against standard text. DO NOT change a value
+//  without checking the cited clause; every table below is normative.
+// ════════════════════════════════════════════════════════════════════════════
+
+// ── ISO 4301-1:1986 / FEM 9.511 — hours-based scheme ────────────────────────
+// T-class upper bounds: total duration of use (hours in MOTION). ISO 4301-1:1986 Table 4.
+const T_BOUNDS=[200,400,800,1600,3200,6300,12500,25000,50000,100000]; // T0..T9 (upper bound of each band)
+const T_NAMES=["T0","T1","T2","T3","T4","T5","T6","T7","T8","T9"];
+// Load spectrum class Km upper bounds. ISO 4301-1:1986 Table 5.
+const L_BOUNDS=[0.125,0.25,0.50,1.00];          // L1..L4 (Km <= bound)
+const L_NAMES=["L1 — Light","L2 — Medium","L3 — Heavy","L4 — Very heavy"];
+const L_NOMINAL=[0.125,0.25,0.50,1.00];          // representative Km used when a class is picked directly
+const L_DESC=[
+  "Usually small loads, rated load only exceptionally",
+  "Usually small loads, rather often the rated load",
+  "Usually medium loads, frequently the rated load",
+  "Regularly close to / at the rated load",
+];
+// FEM 9.511 group designation for each ISO M-class (index 0 = M1). One-to-one ladder (research-verified).
+const FEM_GROUP=["1Dm","1Cm","1Bm","1Am","2m","3m","4m","5m"]; // M1..M8
+// Group selection: M-number = clamp(Tidx + Lclass - 2, 1, 8), Tidx 0..9, Lclass 1..4.
+// This formula reproduces ISO 4301-1:1986 Table 6 / FEM 9.511 cell-for-cell (derived & checked
+// against the published matrix: L1 row M1,M1,M1,M2..M8 ; L4 row M2,M3..M8,M8,M8,M8).
+
+// ── ISO 4301-1:2016 — cycle-based scheme (verified vs the standard's own text) ─
+// U-class upper bounds: total number of crane working cycles, C. ISO 4301-1:2016 Table 2.
+const U_BOUNDS=[1.6e4,3.15e4,6.3e4,1.25e5,2.5e5,5e5,1e6,2e6,4e6,8e6]; // U0..U9
+const U_NAMES=["U0","U1","U2","U3","U4","U5","U6","U7","U8","U9"];
+// State of loading Qp — Kp upper bounds. ISO 4301-1:2016 Table 3.
+const QP_BOUNDS=[0.0313,0.0625,0.125,0.25,0.50,1.00]; // Qp0..Qp5 (Kp <= bound)
+const QP_NAMES=["Qp0","Qp1","Qp2","Qp3","Qp4","Qp5"];
+const QP_DESC=[
+  "Usually very light loads, rated load very rarely",
+  "Rated load occasionally, normally light loads",
+  "Rated load fairly frequently, normally moderate loads",
+  "Rated load frequently, normally heavy loads",
+  "Regularly loaded close to the rated load",
+];
+// A-class: A-index = Uidx + Qpidx - 3, where A-index -3=A03 ... 0=A0 ... 11=A11. ISO 4301-1:2016 Table 4.
+const A_LABELS=["A03","A02","A01","A0","A1","A2","A3","A4","A5","A6","A7","A8","A9","A10","A11"]; // offset +3
+// Cf (design number of full-load cycles) per A-class. ISO 4301-1:2016 Table 5.
+const A_CF=[500,1000,2000,4000,8000,16000,31500,63000,125000,250000,500000,1e6,2e6,4e6,8e6];
+// Annex B Table B.1: total duration of use Tf (h) at full load, per 1986 M-class (M1..M8).
+const TF_M=[100,200,400,800,1600,3200,6300,12500];
+
+// classify a value into a band index by upper bounds; returns bounds.length if it exceeds the top class.
+const classify=(v,bounds)=>{for(let i=0;i<bounds.length;i++){if(v<=bounds[i]*1.0000001)return i;}return bounds.length;};
+const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+
+// load spectrum factor K = Σ (wi/Σw)·(Pi/Pmax)^3  — same cube-of-load-ratio form in both editions
+// (ISO 4301-1:1986 cl.4.2 Km, time-weighted ; ISO 4301-1:2016 Formula (1) Kp, cycle-weighted, m=3).
+// Pmax is the RATED load (= 100% here), NOT the largest load entered — ISO 4301-1: "Pmax is the
+// heaviest load (rated load for hoists) that may be handled". Loads are entered as % of rated, so
+// the denominator is fixed at 100. (Using max-of-entered would wrongly read constant part-load as full duty.)
+function computeK(rows){
+  const valid=rows.filter(r=>r.pct>0&&r.load>=0);
+  if(!valid.length)return null;
+  const wsum=valid.reduce((s,r)=>s+r.pct,0);
+  if(wsum<=0)return null;
+  return valid.reduce((s,r)=>s+(r.pct/wsum)*Math.pow(r.load/100,3),0);
+}
+
+// ── small UI atoms ──────────────────────────────────────────────────────────
+const Badge=({children})=>(
+  <span style={{background:"#fef3c7",color:"#92400e",border:"1px solid #fcd34d"}}
+        className="text-[10px] font-semibold px-1.5 py-0.5 rounded ml-1 align-middle whitespace-nowrap">{children}</span>
+);
+const Field=({label,hint,children})=>(
+  <label className="block mb-3">
+    <div className="text-sm font-medium text-slate-700">{label}</div>
+    {hint&&<div className="text-xs text-slate-400 mb-1">{hint}</div>}
+    {children}
+  </label>
+);
+const Num=(props)=>(
+  <input type="number" {...props}
+    className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+);
+
+function App(){
+  // utilization / kinematics
+  const [Xav,setXav]=useState(6);        // mean hoisting displacement, m
+  const [vav,setVav]=useState(8);        // mean hoisting speed, m/min
+  const [cph,setCph]=useState(10);       // cycles per hour during operation
+  const [hpd,setHpd]=useState(8);        // working hours available per day
+  const [dpy,setDpy]=useState(250);      // working days per year
+  const [years,setYears]=useState(10);   // design service life, years
+
+  // load spectrum
+  const [loadMode,setLoadMode]=useState("class");   // "class" | "derive"
+  const [Lpick,setLpick]=useState(2);                // chosen L-class 1..4 (for "class" mode)
+  const [rows,setRows]=useState([
+    {load:100,pct:20},{load:60,pct:40},{load:30,pct:40},
+  ]);
+
+  const r=useMemo(()=>{
+    const t_av_min=(2*Xav)/vav;            // Eq (B.1): average cycle time, minutes
+    const t_av_h=t_av_min/60;
+    const cyclesPerDay=cph*hpd;
+    const motionHpd=t_av_h*cyclesPerDay;    // operating time per day (h in motion) = old-sheet A12 equivalent
+    const totalHours=motionHpd*dpy*years;   // total duration of use (h) → 1986 T-class
+    const totalCycles=cyclesPerDay*dpy*years; // total working cycles → 2016 U-class
+
+    // load spectrum factor K
+    let K, Lclass, derivedK=null;
+    if(loadMode==="derive"){
+      derivedK=computeK(rows);
+      K = derivedK==null ? null : derivedK;
+      Lclass = K==null ? null : Math.min(classify(K,L_BOUNDS),3); // index 0..3
+    }else{
+      Lclass=Lpick-1;                        // index 0..3
+      K=L_NOMINAL[Lclass];
+    }
+
+    // ── 1986 / FEM result ──
+    const Tidx=classify(totalHours,T_BOUNDS);          // 0..9, or 10 if exceeds T9
+    const tExceeds=Tidx>=T_BOUNDS.length;
+    let Mnum=null,fem=null,iso=null;
+    if(Lclass!=null && !tExceeds){
+      Mnum=clamp(Tidx+(Lclass+1)-2,1,8);               // Lclass index+1 = Lclass number
+      fem=FEM_GROUP[Mnum-1]; iso="M"+Mnum;
+    }
+
+    // ── 2016 result ──
+    const Qpidx = K==null ? null : classify(K,QP_BOUNDS);   // 0..5 (capped at 5)
+    const QpidxC = Qpidx==null ? null : Math.min(Qpidx,5);
+    const Uidx=classify(totalCycles,U_BOUNDS);          // 0..9, or 10 if exceeds U9
+    const uExceeds=Uidx>=U_BOUNDS.length;
+    let Aidx=null,Alabel=null;
+    if(QpidxC!=null && !uExceeds){
+      Aidx=clamp(Uidx+QpidxC-3,-3,11);                  // A-index (-3..11)
+      Alabel=A_LABELS[Aidx+3];
+    }
+
+    return {t_av_min,t_av_h,cyclesPerDay,motionHpd,totalHours,totalCycles,
+      K,derivedK,Lclass,Tidx,tExceeds,Mnum,fem,iso,
+      QpidxC,Uidx,uExceeds,Aidx,Alabel};
+  },[Xav,vav,cph,hpd,dpy,years,loadMode,Lpick,rows]);
+
+  const setRow=(i,k,v)=>setRows(rows.map((row,j)=>j===i?{...row,[k]:v===""?"":Number(v)}:row));
+  const addRow=()=>setRows([...rows,{load:50,pct:10}]);
+  const delRow=(i)=>setRows(rows.filter((_,j)=>j!==i));
+
+  return (
+    <div className="min-h-screen bg-slate-100 text-slate-800" style={{fontFamily:"system-ui,Segoe UI,Roboto,sans-serif"}}>
+      {/* header */}
+      <div style={{background:STEEL}} className="text-white">
+        <div className="max-w-5xl mx-auto px-5 py-5">
+          <h1 className="text-xl font-bold">Hoist Duty Calculator</h1>
+          <p className="text-slate-300 text-sm mt-1">
+            Mechanism duty group from load spectrum &amp; utilization —
+            <span className="font-semibold text-amber-300"> FEM 9.511 / ISO 4301-1:1986</span> and the current
+            <span className="font-semibold text-amber-300"> ISO 4301-1:2016</span> cycle-based scheme, side by side.
+          </p>
+        </div>
+      </div>
+
+      <div className="max-w-5xl mx-auto px-5 py-6 grid md:grid-cols-2 gap-6">
+        {/* ── INPUTS ── */}
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-5">
+          <h2 className="font-bold text-slate-800 mb-1">1 · Utilization &amp; kinematics</h2>
+          <p className="text-xs text-slate-400 mb-4">Used to derive total duration of use (h) and total working cycles.</p>
+
+          <div className="grid grid-cols-2 gap-x-4">
+            <Field label="Mean hoisting height, X_av" hint="m, per cycle">
+              <Num value={Xav} min="0" step="0.1" onChange={e=>setXav(+e.target.value)} />
+            </Field>
+            <Field label="Mean hoisting speed, v_av" hint="m/min">
+              <Num value={vav} min="0.1" step="0.1" onChange={e=>setVav(+e.target.value)} />
+            </Field>
+            <Field label="Cycles per hour" hint="while in operation">
+              <Num value={cph} min="0" step="0.5" onChange={e=>setCph(+e.target.value)} />
+            </Field>
+            <Field label="Working hours per day" hint="hours crane is available">
+              <Num value={hpd} min="0" max="24" step="0.5" onChange={e=>setHpd(+e.target.value)} />
+            </Field>
+            <Field label="Working days per year" hint="typically ~250">
+              <Num value={dpy} min="1" max="365" step="1" onChange={e=>setDpy(+e.target.value)} />
+            </Field>
+            <Field label="Design life" hint="years">
+              <Num value={years} min="1" step="1" onChange={e=>setYears(+e.target.value)} />
+            </Field>
+          </div>
+
+          <h2 className="font-bold text-slate-800 mb-2 mt-3">2 · Load spectrum</h2>
+          <div className="flex gap-2 mb-3">
+            <button onClick={()=>setLoadMode("class")}
+              className={"flex-1 text-sm py-1.5 rounded border "+(loadMode==="class"?"bg-amber-500 text-white border-amber-500":"bg-white text-slate-600 border-slate-300")}>
+              Pick a class
+            </button>
+            <button onClick={()=>setLoadMode("derive")}
+              className={"flex-1 text-sm py-1.5 rounded border "+(loadMode==="derive"?"bg-amber-500 text-white border-amber-500":"bg-white text-slate-600 border-slate-300")}>
+              Derive from load distribution
+            </button>
+          </div>
+
+          {loadMode==="class"?(
+            <div>
+              {L_NAMES.map((n,i)=>(
+                <label key={i} className={"flex items-start gap-2 p-2 rounded border mb-1.5 cursor-pointer "+(Lpick===i+1?"border-amber-400 bg-amber-50":"border-slate-200")}>
+                  <input type="radio" name="L" checked={Lpick===i+1} onChange={()=>setLpick(i+1)} className="mt-1" />
+                  <div>
+                    <div className="text-sm font-medium">{n} <span className="text-slate-400 font-normal">(Km ≈ {L_NOMINAL[i]})</span></div>
+                    <div className="text-xs text-slate-500">{L_DESC[i]}</div>
+                  </div>
+                </label>
+              ))}
+            </div>
+          ):(
+            <div>
+              <div className="text-xs text-slate-400 mb-1">Load as % of rated capacity, weighted by % of cycles (or time). K = Σ(wᵢ/Σw)·(Pᵢ/P_max)³<Badge>ISO 4301-1:2016 Formula (1), m=3</Badge></div>
+              <table className="w-full text-sm mb-2">
+                <thead><tr className="text-slate-500 text-xs">
+                  <th className="text-left font-medium pb-1">Load (% of rated)</th>
+                  <th className="text-left font-medium pb-1">Weight (% cycles)</th>
+                  <th></th>
+                </tr></thead>
+                <tbody>
+                  {rows.map((row,i)=>(
+                    <tr key={i}>
+                      <td className="pr-2 pb-1"><Num value={row.load} min="0" max="200" step="5" onChange={e=>setRow(i,"load",e.target.value)} /></td>
+                      <td className="pr-2 pb-1"><Num value={row.pct} min="0" step="5" onChange={e=>setRow(i,"pct",e.target.value)} /></td>
+                      <td className="pb-1"><button onClick={()=>delRow(i)} className="text-slate-400 hover:text-red-500 px-1">✕</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <button onClick={addRow} className="text-sm text-amber-700 font-medium">+ add load level</button>
+              <div className="text-xs text-slate-500 mt-2">
+                Computed K = <span className="font-mono font-semibold">{r.derivedK==null?"—":fmt(r.derivedK,4)}</span>
+                {r.derivedK!=null && <span> → class {r.Lclass!=null?L_NAMES[r.Lclass].split(" ")[0]:"—"} / {QP_NAMES[r.QpidxC]}</span>}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── RESULTS ── */}
+        <div className="space-y-5">
+          {/* derived intermediates */}
+          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-5">
+            <h2 className="font-bold text-slate-800 mb-3">Derived quantities</h2>
+            <dl className="grid grid-cols-2 gap-y-2 text-sm">
+              <dt className="text-slate-500">Mean cycle time t_av <Badge>Eq (B.1) 2·X/v</Badge></dt>
+              <dd className="text-right font-mono">{fmt(r.t_av_min,2)} min</dd>
+              <dt className="text-slate-500">Cycles per day</dt>
+              <dd className="text-right font-mono">{fmt0(r.cyclesPerDay)}</dd>
+              <dt className="text-slate-500">Operating time / day (in motion)</dt>
+              <dd className="text-right font-mono">{fmt(r.motionHpd,2)} h</dd>
+              <dt className="text-slate-500">Total duration of use</dt>
+              <dd className="text-right font-mono">{fmt0(r.totalHours)} h</dd>
+              <dt className="text-slate-500">Total working cycles</dt>
+              <dd className="text-right font-mono">{fmt0(r.totalCycles)}</dd>
+              <dt className="text-slate-500">Load spectrum factor K</dt>
+              <dd className="text-right font-mono">{r.K==null?"—":fmt(r.K,4)}</dd>
+            </dl>
+          </div>
+
+          {/* primary result: FEM / 1986 */}
+          <div className="rounded-lg shadow-sm border-2 p-5" style={{borderColor:ACCENT,background:"#fffbeb"}}>
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-bold text-slate-800">Required hoist duty</h2>
+              <Badge>FEM 9.511 / ISO 4301-1:1986</Badge>
+            </div>
+            <div className="flex items-end gap-6 mt-2">
+              <div>
+                <div className="text-xs text-slate-500">FEM 9.511 group</div>
+                <div className="text-4xl font-extrabold" style={{color:ACCENT}}>{r.fem||"—"}</div>
+              </div>
+              <div>
+                <div className="text-xs text-slate-500">ISO mechanism group</div>
+                <div className="text-4xl font-extrabold text-slate-700">{r.iso||"—"}</div>
+              </div>
+            </div>
+            <div className="text-sm text-slate-600 mt-3">
+              {r.tExceeds
+                ? <span className="text-red-600 font-medium">Total duration exceeds T9 (100 000 h) — outside the standard range; review inputs / consult Levate.</span>
+                : <span>Utilization class <b>{r.Tidx!=null?T_NAMES[r.Tidx]:"—"}</b> ({fmt0(r.totalHours)} h) × load class <b>{r.Lclass!=null?L_NAMES[r.Lclass].split(" ")[0]:"—"}</b> (Km ≤ {r.Lclass!=null?L_BOUNDS[r.Lclass]:"—"}).</span>}
+            </div>
+          </div>
+
+          {/* secondary result: 2016 */}
+          <div className="rounded-lg shadow-sm border border-slate-300 p-5 bg-white">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="font-bold text-slate-800">Current-edition group class</h2>
+              <Badge>ISO 4301-1:2016 (cycle-based)</Badge>
+            </div>
+            <div className="flex items-end gap-6 mt-2">
+              <div>
+                <div className="text-xs text-slate-500">Group class A</div>
+                <div className="text-4xl font-extrabold text-slate-700">{r.Alabel||"—"}</div>
+              </div>
+              <div className="text-sm text-slate-600">
+                {r.uExceeds
+                  ? <span className="text-red-600 font-medium">Total cycles exceed U9 (8×10⁶) — outside the standard range.</span>
+                  : <span>Utilization <b>{r.Uidx!=null?U_NAMES[r.Uidx]:"—"}</b> ({fmt0(r.totalCycles)} cycles)<br/>× load <b>{r.QpidxC!=null?QP_NAMES[r.QpidxC]:"—"}</b> (Kp ≤ {r.QpidxC!=null?QP_BOUNDS[r.QpidxC]:"—"}).</span>}
+              </div>
+            </div>
+            <p className="text-xs text-slate-400 mt-3">Both results derive from the same physical inputs; the 1986 M-class is what hoist manufacturers quote, the 2016 A-class is the current standard. They are independent classifications, not a direct conversion.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* reference tables */}
+      <div className="max-w-5xl mx-auto px-5 pb-10">
+        <details className="bg-white rounded-lg shadow-sm border border-slate-200 p-5">
+          <summary className="font-bold text-slate-800 cursor-pointer">Reference tables &amp; standard basis</summary>
+          <div className="grid md:grid-cols-2 gap-6 mt-4 text-sm">
+            <div>
+              <h3 className="font-semibold mb-1">FEM ↔ ISO group ladder</h3>
+              <table className="w-full text-xs border border-slate-200">
+                <thead><tr className="bg-slate-50">{["ISO","FEM"].map(h=><th key={h} className="border border-slate-200 px-2 py-1">{h}</th>)}</tr></thead>
+                <tbody>{FEM_GROUP.map((g,i)=>(<tr key={i}><td className="border border-slate-200 px-2 py-1 text-center">M{i+1}</td><td className="border border-slate-200 px-2 py-1 text-center font-medium">{g}</td></tr>))}</tbody>
+              </table>
+              <p className="text-xs text-slate-400 mt-1">Verified one-to-one mapping.</p>
+
+              <h3 className="font-semibold mb-1 mt-4">Load classes (Km)</h3>
+              <table className="w-full text-xs border border-slate-200">
+                <tbody>
+                  <tr className="bg-slate-50"><td className="border border-slate-200 px-2 py-1">1986</td>{L_NAMES.map((n,i)=><td key={i} className="border border-slate-200 px-2 py-1">{n.split(" ")[0]} ≤{L_BOUNDS[i]}</td>)}</tr>
+                  <tr><td className="border border-slate-200 px-2 py-1">2016 Qp</td><td colSpan="4" className="border border-slate-200 px-2 py-1">{QP_NAMES.map((q,i)=>q+"≤"+QP_BOUNDS[i]).join("  ·  ")}</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div>
+              <h3 className="font-semibold mb-1">Utilization — 1986 T-class (total motion hours)</h3>
+              <div className="text-xs text-slate-600 font-mono leading-5">{T_NAMES.map((n,i)=>n+" ≤ "+T_BOUNDS[i].toLocaleString("en-GB")+" h").join("  ·  ")}</div>
+              <h3 className="font-semibold mb-1 mt-4">Utilization — 2016 U-class (total cycles)</h3>
+              <div className="text-xs text-slate-600 font-mono leading-5">{U_NAMES.map((n,i)=>n+" ≤ "+U_BOUNDS[i].toExponential(2)).join("  ·  ")}</div>
+              <h3 className="font-semibold mb-1 mt-4">Standards</h3>
+              <ul className="text-xs text-slate-600 list-disc pl-4 space-y-0.5">
+                <li><b>ISO 4301-1:1986</b> — Tables 4 (T), 5 (Km), 6 (M-group). De-facto basis for hoist catalogues (Demag, Konecranes, Verlinde, GIS); referenced by EN 14492.</li>
+                <li><b>FEM 9.511</b> — mechanism groups 1Dm…5m, identical structure.</li>
+                <li><b>ISO 4301-1:2016</b> — Tables 2 (U), 3 (Qp), 4 (A), 5 (Cf), Annex B (M-class conversion). Supersedes the 1986 edition with cycle-based classification.</li>
+              </ul>
+            </div>
+          </div>
+          <p className="text-xs text-slate-400 mt-4 border-t border-slate-100 pt-3">
+            Classification only — this does not size the hoist motor (FEM 9.683, starts/hour) or address component-level (Ac) duty. Engineering values are taken from the cited standards; verify against the controlling standard for final design.
+          </p>
+        </details>
+        <p className="text-center text-xs text-slate-400 mt-4">Levate Solutions Ltd · for crane engineering use · check against the controlling standard before order.</p>
+      </div>
+    </div>
+  );
+}
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
