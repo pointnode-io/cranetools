@@ -17,6 +17,7 @@ its own top-level directory and is self-contained.
 | Hoist duty calculator | `hoistdutycalculator/` | Mechanism duty group from load spectrum + utilization — FEM 9.511 / ISO 4301-1:1986 and ISO 4301-1:2016, side by side |
 | FM1 calcs | `fm1calcs/` | Live rebuild of the firm's Form FM1 design-practice spreadsheet — proof-of-competence to BS 2853:1957 |
 | Crane drive sizer | `cranedrivesizer/` | One tool, pick the motion: motor · gearbox · brake sizing for hoist / long-travel / cross-travel. Hoist tab is the deep serial-hoist sizer (static/dynamic/peak/RMS torque, optimum & speed-match gear ratio, stall margin, 125% proof-load, brake & service factors, S1/%ED duty, 87 Hz, per-drive). Travel tabs add the anti-skid drive check. Recommendations round up (won't undersize) |
+| Crane estimator | `craneestimator/` | Phase 1 of the "enter the crane once" configurator — single-girder overhead: spec → girder selection & steel weight → installed kW → rough tender cost from an editable rate card (+ £/tonne cross-check). Indicative; expands into the detailed-design tools. Phase 2 adds double-girder / gantry / jib |
 
 When you add a new tool, create a new top-level directory and give it its own
 `CLAUDE.md` (and `README.md`).
