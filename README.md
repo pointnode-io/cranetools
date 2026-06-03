@@ -48,6 +48,18 @@ Open the file directly in a browser.
 
 Open the file directly in a browser.
 
+### `craneestimator/`
+
+- `crane-estimator.html` — Phase 1 of the "enter the crane once" configurator.
+  For a single-girder overhead crane it sizes the main girder (real beam
+  mechanics, deflection + bending), estimates structural steel weight and
+  installed power, and rolls up a rough **tender cost** from an editable rate
+  card, with a **£/tonne cross-check** against your current rule-of-thumb. The
+  same spec is designed to expand into the detailed-design tools once a job is
+  won. **Indicative only — not a fixed quotation.**
+
+Open the file directly in a browser.
+
 ## Working in this repo
 
 - No build step — open the HTML files directly.

@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Crane Estimator — spec · structure · rough cost</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body{margin:0}
+  select,input{appearance:auto}
+  @media print{
+    .no-print{display:none!important}
+    body{background:#fff}
+    details{display:block!important}
+    summary{list-style:none}
+    .print-block{break-inside:avoid}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useMemo}=React;
+const ACCENT="#d97706",STEEL="#1e293b";
+const fmt=(x,dp=2)=>(x==null||!isFinite(x))?"—":Number(x).toLocaleString("en-GB",{minimumFractionDigits:dp,maximumFractionDigits:dp});
+const fmt0=(x)=>(x==null||!isFinite(x))?"—":Math.round(x).toLocaleString("en-GB");
+const gbp=(x)=>(x==null||!isFinite(x))?"—":"£"+Math.round(x).toLocaleString("en-GB");
+
+// ════════════════════════════════════════════════════════════════════════════
+//  CRANE ESTIMATOR — Phase 1: single-girder overhead (top-running)
+//
+//  Staged "enter the crane once" tool. ESTIMATE mode: minimal spec → rough
+//  structure selection & weight → rate-card cost → tender total + outline spec.
+//  Designed to expand into the detailed-design tools (loads, drives, electrical)
+//  on the SAME spec once a job is won.
+//
+//  AUTHORITY / HONESTY:
+//   • Structure sizing uses real beam mechanics, but the SECTION LIBRARY and the
+//     crab/end-carriage weight factors are INDICATIVE — for a firm design use the
+//     Crane Loading Calculator. Flagged in the UI.
+//   • Every COST is a rate in an editable "rate card", SEEDED with industry-typical
+//     GBP values (no project data yet). Expect ±20–30% until tuned against real
+//     jobs. Replace the rates with your shop's figures as you get them.
+//   • g = 9.81 m/s².
+// ════════════════════════════════════════════════════════════════════════════
+const G=9.81, E=210000;   // N/mm²
+
+// Indicative UB section library — mass (kg/m), Ix (cm⁴), Wx,el (cm³). VERIFY for design.
+const UB=[
+  ["203×133×30",30.0,2896,280],
+  ["254×146×37",37.0,5537,433],
+  ["305×165×46",46.1,9899,646],
+  ["356×171×57",57.0,16040,896],
+  ["406×178×67",67.1,24330,1190],
+  ["457×191×82",82.0,37050,1610],
+  ["533×210×101",101.0,61520,2290],
+  ["610×229×125",125.0,98610,3220],
+  ["686×254×152",152.0,150400,4370],
+  ["762×267×173",173.0,205300,5390],
+  ["838×292×194",194.0,279200,6640],
+  ["914×305×224",224.0,376400,8240],
+];
+const DUTY=[["light",0.90],["medium",1.00],["heavy",1.20],["severe",1.45]];
+
+// Industry-typical SEED rates (GBP) — ALL editable, replace with your figures.
+const RATES={
+  steelMat:1.30,        // £/kg material
+  fabHrsTonne:30,       // fabrication hours per tonne
+  labourRate:45,        // £/hr
+  paintPerKg:0.60,      // £/kg finish
+  hoistBase:3000, hoistPerTonne:700,            // hoist £ = base + per-tonne SWL × duty
+  drivesBase:2500, drivesPerKW:350,             // motors+VFD+panel £ = base + per kW
+  condBarPerM:45,       // power supply £/m of runway
+  wheelsBase:3000, wheelsPerTonne:150,          // travel wheels/bogies £ = base + per tonne crane wt
+  sundries:3000,        // buffers, limits, pendant/radio etc.
+  engHrs:40,            // engineering/design hours
+  installDays:3, installDayRate:800,
+  overheadPct:12, marginPct:20,
+  tRate:9000,           // £/tonne rule-of-thumb cross-check (YOUR figure) — placeholder
+};
+
+// ── structure sizing (simply-supported girder, point live load at midspan) ──
+function sizeGirder(spec){
+  const L=(spec.span||0)*1000;                       // mm
+  const mLift=(spec.swl||0)+(spec.hook||0);          // kg
+  const mCrab=spec.crab||0;                          // kg
+  const P=(mLift+mCrab)*G*(spec.phi||1.15);          // N, live point load
+  const fy=spec.grade||275, sigAllow=fy/(spec.gammaM||1.05);
+  const defLimit=L/(spec.defLim||600);               // mm
+  for(const [name,mass,Ix_cm4,Wx_cm3] of UB){
+    const w=mass*G;                                  // N/m self weight
+    const Mdead=w*Math.pow(spec.span||0,2)/8;        // N·m
+    const Mlive=P*(spec.span||0)/4;                  // N·m
+    const M=(Mdead+Mlive)*1000;                      // N·mm
+    const Wx=Wx_cm3*1000, Ix=Ix_cm4*1e4;             // mm³, mm⁴
+    const sigma=M/Wx;                                // N/mm²
+    const defl=P*Math.pow(L,3)/(48*E*Ix);            // mm (live only)
+    if(sigma<=sigAllow && defl<=defLimit){
+      return {name,mass,Ix_cm4,Wx_cm3,sigma,defl,defLimit,P,ok:true};
+    }
+  }
+  return {ok:false,P,defLimit};   // exceeds library → needs plate/double girder
+}
+
+function compute(spec,rates){
+  const g=sizeGirder(spec);
+  // weights
+  const girderWt=g.ok?g.mass*(spec.span||0):NaN;                 // kg
+  const endCarrWt=g.ok?girderWt*(spec.ecFactor||0.25):NaN;       // kg
+  const miscWt=g.ok?(girderWt+endCarrWt)*(spec.miscFactor||0.10):NaN;
+  const structWt=g.ok?girderWt+endCarrWt+miscWt:NaN;             // kg
+  const structT=structWt/1000;
+  // power (installed)
+  const mLift=(spec.swl||0)+(spec.hook||0);
+  const hoistKW=mLift*G*((spec.vHoist||0)/60)/(spec.etaHoist||0.75)/1000;
+  const installedKW=hoistKW*(spec.travelFactor||1.3);
+  // total crane operating weight (for wheels cost) ≈ struct + crab + load? use struct + crab
+  const craneWt=structWt+(spec.crab||0);
+  const SWLt=(spec.swl||0)/1000;
+  const dutyMult=(DUTY.find(d=>d[0]===spec.duty)||["",1])[1];
+  // cost line items
+  const li={};
+  li["Fabricated steel — material"]=structWt*rates.steelMat;
+  li["Fabrication labour"]=structT*rates.fabHrsTonne*rates.labourRate;
+  li["Paint / finish"]=structWt*rates.paintPerKg;
+  li["Hoist unit"]=(rates.hoistBase+rates.hoistPerTonne*SWLt)*dutyMult;
+  li["Motors · VFDs · panel"]=rates.drivesBase+rates.drivesPerKW*installedKW;
+  li["Power supply (conductor bar)"]=rates.condBarPerM*(spec.runway||0);
+  li["Travel wheels / bogies"]=rates.wheelsBase+rates.wheelsPerTonne*(craneWt/1000);
+  li["Sundries (buffers, limits, pendant)"]=rates.sundries;
+  li["Engineering / design"]=rates.engHrs*rates.labourRate;
+  li["Install & commission"]=rates.installDays*rates.installDayRate;
+  const subtotal=Object.values(li).reduce((s,x)=>s+(isFinite(x)?x:0),0);
+  const overhead=subtotal*(rates.overheadPct/100);
+  const cost=subtotal+overhead;
+  const margin=cost*(rates.marginPct/100);
+  const total=cost+margin;
+  const perTonneSWL=SWLt>0?total/SWLt:NaN;
+  const perKgCrane=structWt>0?total/structWt:NaN;
+  // £/tonne rule-of-thumb cross-check (your current method)
+  const tBasisQty=(spec.tBasis==="swl")?SWLt:structT;
+  const crossTotal=(rates.tRate||0)*tBasisQty;
+  const crossDiff=total>0?(crossTotal-total)/total*100:NaN;
+  const warns=[];
+  if(!g.ok)warns.push("Required girder exceeds the indicative UB library — this span/load needs a plate girder or a double-girder crane. Estimate below assumes the largest section as a placeholder.");
+  if((spec.span||0)>25)warns.push("Span > 25 m on a single girder is unusual — consider double-girder.");
+  if(!(spec.swl>0)||!(spec.span>0))warns.push("Enter SWL and span.");
+  return {g,girderWt,endCarrWt,miscWt,structWt,structT,hoistKW,installedKW,craneWt,SWLt,dutyMult,li,subtotal,overhead,cost,margin,total,perTonneSWL,perKgCrane,crossTotal,crossDiff,tBasisQty,warns};
+}
+
+// ── UI atoms ─────────────────────────────────────────────────────────────────
+const Badge=({children,tone})=>(
+  <span style={tone==="def"?{background:"#e0f2fe",color:"#075985",border:"1px solid #7dd3fc"}
+                           :{background:"#fef3c7",color:"#92400e",border:"1px solid #fcd34d"}}
+        className="text-[10px] font-semibold px-1.5 py-0.5 rounded ml-1 align-middle whitespace-nowrap">{children}</span>
+);
+const Field=({label,hint,children})=>(
+  <label className="block mb-3">
+    <div className="text-sm font-medium text-slate-700">{label}</div>
+    {hint&&<div className="text-xs text-slate-400 mb-1">{hint}</div>}
+    {children}
+  </label>
+);
+const Num=(props)=>(
+  <input type="number" {...props}
+    className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+);
+const Sel=({value,onChange,children})=>(
+  <select value={value} onChange={onChange} className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">{children}</select>
+);
+const Group=({title,open,children})=>(
+  <details open={open} className="border border-slate-200 rounded-lg mb-3">
+    <summary className="cursor-pointer select-none font-semibold text-slate-700 text-sm px-3 py-2 bg-slate-50 rounded-t-lg">{title}</summary>
+    <div className="p-3">{children}</div>
+  </details>
+);
+const Rate=({label,unit,value,onChange,step})=>(
+  <label className="flex items-center justify-between gap-2 mb-1.5 text-sm">
+    <span className="text-slate-600">{label}</span>
+    <span className="flex items-center gap-1">
+      <input type="number" value={value} step={step||"0.1"} onChange={onChange}
+        className="w-24 border border-slate-300 rounded px-2 py-1 text-sm text-right"/>
+      <span className="text-xs text-slate-400 w-16">{unit}</span>
+    </span>
+  </label>
+);
+
+function App(){
+  const [customer,setCustomer]=useState("");
+  const [quoteNo,setQuoteNo]=useState("");
+  const [dateStr,setDateStr]=useState("");
+  const [preparedBy,setPreparedBy]=useState("");
+
+  const [spec,setSpec]=useState({
+    type:"sgo",
+    swl:5000,hook:200,crab:900,
+    span:15,hol:8,runway:40,
+    vHoist:8,vCross:20,vLong:40,
+    duty:"medium",grade:275,gammaM:1.05,defLim:600,phi:1.15,
+    etaHoist:0.75,travelFactor:1.3,ecFactor:0.25,miscFactor:0.10,
+    outdoor:false,supply:400,tBasis:"swl"});
+  const setS=(k,v)=>setSpec({...spec,[k]:(typeof v==="string"||typeof v==="boolean")?v:(v===""?"":Number(v))});
+
+  const [rates,setRates]=useState({...RATES});
+  const setR=(k,v)=>setRates({...rates,[k]:v===""?"":Number(v)});
+
+  const r=useMemo(()=>compute(spec,rates),[spec,rates]);
+
+  return (
+    <div className="min-h-screen bg-slate-100 text-slate-800" style={{fontFamily:"system-ui,Segoe UI,Roboto,sans-serif"}}>
+      <div style={{background:STEEL}} className="text-white">
+        <div className="max-w-6xl mx-auto px-5 py-5">
+          <h1 className="text-xl font-bold">Crane Estimator <span className="text-amber-300 text-sm font-normal">· Phase 1: single-girder overhead</span></h1>
+          <p className="text-slate-300 text-sm mt-1">
+            Enter the crane once → rough <span className="font-semibold text-amber-300">structure</span>,
+            installed power and a <span className="font-semibold text-amber-300">tender cost</span> from an editable rate card.
+            Expands into the detailed design tools on the same spec once won.
+          </p>
+        </div>
+      </div>
+
+      <div className="max-w-6xl mx-auto px-5 pt-5">
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 flex flex-wrap items-end gap-3">
+          <label className="text-xs text-slate-600 flex-1 min-w-[140px]">Customer
+            <input value={customer} onChange={e=>setCustomer(e.target.value)} className="mt-0.5 w-full border border-slate-300 rounded px-2 py-1 text-sm" /></label>
+          <label className="text-xs text-slate-600 w-32">Quotation No.
+            <input value={quoteNo} onChange={e=>setQuoteNo(e.target.value)} className="mt-0.5 w-full border border-slate-300 rounded px-2 py-1 text-sm" /></label>
+          <label className="text-xs text-slate-600 w-32">Date
+            <input value={dateStr} onChange={e=>setDateStr(e.target.value)} placeholder="dd/mm/yyyy" className="mt-0.5 w-full border border-slate-300 rounded px-2 py-1 text-sm" /></label>
+          <label className="text-xs text-slate-600 w-32">Prepared by
+            <input value={preparedBy} onChange={e=>setPreparedBy(e.target.value)} className="mt-0.5 w-full border border-slate-300 rounded px-2 py-1 text-sm" /></label>
+          <button onClick={()=>window.print()} className="no-print text-sm bg-slate-700 text-white px-3 py-1.5 rounded hover:bg-slate-800">Print / PDF</button>
+        </div>
+      </div>
+
+      {/* indicative banner */}
+      <div className="max-w-6xl mx-auto px-5 pt-4">
+        <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-800 print-block">
+          <b>Indicative estimate.</b> Rates are seeded with industry-typical figures (no project data yet) — expect ±20–30% until
+          tuned to your shop. Structure uses real beam mechanics with an indicative section library; firm it in the Crane Loading
+          Calculator. Replace the rate card with your numbers as you get them.
+        </div>
+      </div>
+
+      <div className="max-w-6xl mx-auto px-5 py-6 grid md:grid-cols-2 gap-6">
+        {/* INPUTS */}
+        <div>
+          <Group title="Crane type" open={true}>
+            <Sel value={spec.type} onChange={e=>setS("type",e.target.value)}>
+              <option value="sgo">Overhead — single girder (top-running)</option>
+              <option value="dgo" disabled>Overhead — double girder (next)</option>
+              <option value="gantry" disabled>Goliath / gantry (next)</option>
+              <option value="jib" disabled>Jib / monorail (next)</option>
+            </Sel>
+          </Group>
+
+          <Group title="Specification" open={true}>
+            <div className="grid grid-cols-2 gap-x-4">
+              <Field label="SWL" hint="kg"><Num value={spec.swl} min="0" step="250" onChange={e=>setS("swl",e.target.value)}/></Field>
+              <Field label="Bottom block / hook" hint="kg"><Num value={spec.hook} min="0" step="10" onChange={e=>setS("hook",e.target.value)}/></Field>
+              <Field label="Span (rail–rail)" hint="m"><Num value={spec.span} min="0" step="0.5" onChange={e=>setS("span",e.target.value)}/></Field>
+              <Field label="Height of lift" hint="m"><Num value={spec.hol} min="0" step="0.5" onChange={e=>setS("hol",e.target.value)}/></Field>
+              <Field label="Runway length" hint="m"><Num value={spec.runway} min="0" step="1" onChange={e=>setS("runway",e.target.value)}/></Field>
+              <Field label="Crab mass (est.)" hint="kg, hoist+trolley"><Num value={spec.crab} min="0" step="50" onChange={e=>setS("crab",e.target.value)}/></Field>
+              <Field label="Hoist speed" hint="m/min"><Num value={spec.vHoist} min="0" step="0.5" onChange={e=>setS("vHoist",e.target.value)}/></Field>
+              <Field label="Duty class" hint="">
+                <Sel value={spec.duty} onChange={e=>setS("duty",e.target.value)}>
+                  {DUTY.map(([d])=><option key={d} value={d}>{d}</option>)}
+                </Sel>
+              </Field>
+              <Field label="Cross-travel speed" hint="m/min"><Num value={spec.vCross} min="0" step="1" onChange={e=>setS("vCross",e.target.value)}/></Field>
+              <Field label="Long-travel speed" hint="m/min"><Num value={spec.vLong} min="0" step="1" onChange={e=>setS("vLong",e.target.value)}/></Field>
+              <Field label="Supply" hint="V"><Num value={spec.supply} min="0" step="10" onChange={e=>setS("supply",e.target.value)}/></Field>
+              <label className="flex items-center gap-2 text-sm text-slate-700 mt-7"><input type="checkbox" checked={spec.outdoor} onChange={e=>setS("outdoor",e.target.checked)}/> Outdoor</label>
+            </div>
+          </Group>
+
+          <Group title="Structure assumptions" open={false}>
+            <div className="grid grid-cols-2 gap-x-4">
+              <Field label="Steel grade fy" hint="N/mm²"><Num value={spec.grade} min="0" step="5" onChange={e=>setS("grade",e.target.value)}/></Field>
+              <Field label="Deflection limit span/" hint="EN 1993-6"><Num value={spec.defLim} min="0" step="50" onChange={e=>setS("defLim",e.target.value)}/></Field>
+              <Field label="Dynamic factor φ" hint="hoist"><Num value={spec.phi} min="1" step="0.05" onChange={e=>setS("phi",e.target.value)}/></Field>
+              <Field label="γM" hint="material factor"><Num value={spec.gammaM} min="1" step="0.05" onChange={e=>setS("gammaM",e.target.value)}/></Field>
+              <Field label="End-carriage wt factor" hint="× girder wt"><Num value={spec.ecFactor} min="0" step="0.05" onChange={e=>setS("ecFactor",e.target.value)}/></Field>
+              <Field label="Misc wt factor" hint="walkway/fixings"><Num value={spec.miscFactor} min="0" step="0.05" onChange={e=>setS("miscFactor",e.target.value)}/></Field>
+              <Field label="Hoist drive η" hint="for kW est."><Num value={spec.etaHoist} min="0" max="1" step="0.05" onChange={e=>setS("etaHoist",e.target.value)}/></Field>
+              <Field label="Travel power factor" hint="× hoist kW"><Num value={spec.travelFactor} min="1" step="0.05" onChange={e=>setS("travelFactor",e.target.value)}/></Field>
+            </div>
+          </Group>
+
+          <Group title="Rate card (editable — your figures here)" open={false}>
+            <p className="text-xs text-slate-400 mb-2">Seeded with industry-typical GBP values <Badge tone="def">replace with yours</Badge></p>
+            <Rate label="Steel material" unit="£/kg" value={rates.steelMat} step="0.05" onChange={e=>setR("steelMat",e.target.value)}/>
+            <Rate label="Fabrication" unit="hrs/tonne" value={rates.fabHrsTonne} step="1" onChange={e=>setR("fabHrsTonne",e.target.value)}/>
+            <Rate label="Labour rate" unit="£/hr" value={rates.labourRate} step="1" onChange={e=>setR("labourRate",e.target.value)}/>
+            <Rate label="Paint / finish" unit="£/kg" value={rates.paintPerKg} step="0.05" onChange={e=>setR("paintPerKg",e.target.value)}/>
+            <Rate label="Hoist base" unit="£" value={rates.hoistBase} step="100" onChange={e=>setR("hoistBase",e.target.value)}/>
+            <Rate label="Hoist per tonne SWL" unit="£/t" value={rates.hoistPerTonne} step="50" onChange={e=>setR("hoistPerTonne",e.target.value)}/>
+            <Rate label="Drives/panel base" unit="£" value={rates.drivesBase} step="100" onChange={e=>setR("drivesBase",e.target.value)}/>
+            <Rate label="Drives/panel per kW" unit="£/kW" value={rates.drivesPerKW} step="10" onChange={e=>setR("drivesPerKW",e.target.value)}/>
+            <Rate label="Conductor bar" unit="£/m" value={rates.condBarPerM} step="5" onChange={e=>setR("condBarPerM",e.target.value)}/>
+            <Rate label="Wheels/bogies base" unit="£" value={rates.wheelsBase} step="100" onChange={e=>setR("wheelsBase",e.target.value)}/>
+            <Rate label="Wheels per tonne crane" unit="£/t" value={rates.wheelsPerTonne} step="10" onChange={e=>setR("wheelsPerTonne",e.target.value)}/>
+            <Rate label="Sundries" unit="£" value={rates.sundries} step="100" onChange={e=>setR("sundries",e.target.value)}/>
+            <Rate label="Engineering" unit="hrs" value={rates.engHrs} step="5" onChange={e=>setR("engHrs",e.target.value)}/>
+            <Rate label="Install days" unit="days" value={rates.installDays} step="0.5" onChange={e=>setR("installDays",e.target.value)}/>
+            <Rate label="Install day rate" unit="£/day" value={rates.installDayRate} step="50" onChange={e=>setR("installDayRate",e.target.value)}/>
+            <Rate label="Overhead" unit="%" value={rates.overheadPct} step="1" onChange={e=>setR("overheadPct",e.target.value)}/>
+            <Rate label="Margin" unit="%" value={rates.marginPct} step="1" onChange={e=>setR("marginPct",e.target.value)}/>
+          </Group>
+
+          <Group title="£/tonne cross-check (your current method)" open={true}>
+            <p className="text-xs text-slate-400 mb-2">Your rule-of-thumb £/t, compared against the build-up above. <Badge tone="def">enter your figure</Badge></p>
+            <div className="flex gap-2 mb-2">
+              <button onClick={()=>setS("tBasis","swl")} className={"text-xs px-2 py-1 rounded border "+(spec.tBasis==="swl"?"bg-amber-500 text-white border-amber-500":"bg-white text-slate-600 border-slate-300")}>per tonne SWL</button>
+              <button onClick={()=>setS("tBasis","crane")} className={"text-xs px-2 py-1 rounded border "+(spec.tBasis==="crane"?"bg-amber-500 text-white border-amber-500":"bg-white text-slate-600 border-slate-300")}>per tonne crane steel</button>
+            </div>
+            <Rate label={"£/tonne ("+(spec.tBasis==="swl"?"SWL":"crane steel")+")"} unit="£/t" value={rates.tRate} step="250" onChange={e=>setR("tRate",e.target.value)}/>
+          </Group>
+        </div>
+
+        {/* RESULTS */}
+        <div className="space-y-5">
+          {r.warns.length>0 && (
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+              <ul className="list-disc pl-5 space-y-0.5">{r.warns.map((w,i)=><li key={i}>{w}</li>)}</ul>
+            </div>
+          )}
+
+          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-5 print-block">
+            <h2 className="font-bold text-slate-800 mb-3">Structure &amp; power</h2>
+            <dl className="grid grid-cols-2 gap-y-1.5 text-sm">
+              <Row k="Selected girder" v={r.g.ok?r.g.name:"> library"} strong badge={{t:"indicative",tone:"def"}}/>
+              <Row k="Bending stress" unit="N/mm²" v={r.g.ok?fmt(r.g.sigma,0):"—"}/>
+              <Row k="Deflection" unit="mm" v={r.g.ok?fmt(r.g.defl,1)+" / "+fmt(r.g.defLimit,1):"—"}/>
+              <Row k="Girder weight" unit="kg" v={fmt0(r.girderWt)}/>
+              <Row k="End carriages + misc" unit="kg" v={fmt0(r.endCarrWt+r.miscWt)}/>
+              <Row k="Total structure weight" unit="kg" v={fmt0(r.structWt)} strong/>
+              <Row k="Hoist power" unit="kW" v={fmt(r.hoistKW,1)}/>
+              <Row k="Installed power (est.)" unit="kW" v={fmt(r.installedKW,1)} strong/>
+            </dl>
+          </div>
+
+          <div className="rounded-lg shadow-sm border-2 p-5 print-block" style={{borderColor:ACCENT,background:"#fffbeb"}}>
+            <h2 className="font-bold text-slate-800 mb-3">Rough cost</h2>
+            <table className="w-full text-sm">
+              <tbody>
+                {Object.entries(r.li).map(([k,v])=>(
+                  <tr key={k} className="border-b border-amber-100">
+                    <td className="py-1 text-slate-600">{k}</td>
+                    <td className="py-1 text-right font-mono">{gbp(v)}</td>
+                  </tr>
+                ))}
+                <tr className="border-t border-amber-200"><td className="py-1 text-slate-500">Subtotal</td><td className="py-1 text-right font-mono">{gbp(r.subtotal)}</td></tr>
+                <tr><td className="py-1 text-slate-500">Overhead ({fmt0(rates.overheadPct)}%)</td><td className="py-1 text-right font-mono">{gbp(r.overhead)}</td></tr>
+                <tr><td className="py-1 text-slate-500">Margin ({fmt0(rates.marginPct)}%)</td><td className="py-1 text-right font-mono">{gbp(r.margin)}</td></tr>
+                <tr className="border-t-2 border-amber-300"><td className="py-2 font-bold text-slate-800">TENDER TOTAL</td><td className="py-2 text-right font-mono font-bold text-lg" style={{color:ACCENT}}>{gbp(r.total)}</td></tr>
+              </tbody>
+            </table>
+            <div className="grid grid-cols-2 gap-y-1 text-xs text-slate-500 mt-2">
+              <span>£ / tonne SWL</span><span className="text-right font-mono">{gbp(r.perTonneSWL)}</span>
+              <span>£ / kg of crane steel</span><span className="text-right font-mono">{fmt(r.perKgCrane,2)}</span>
+            </div>
+          </div>
+
+          <div className="rounded-lg shadow-sm border-2 p-5 print-block" style={{borderColor:"#0369a1",background:"#f0f9ff"}}>
+            <h2 className="font-bold text-slate-800 mb-2">£/tonne cross-check <Badge tone="def">your method</Badge></h2>
+            <dl className="grid grid-cols-2 gap-y-1.5 text-sm">
+              <Row k={"Rate × "+(spec.tBasis==="swl"?fmt(r.SWLt,2)+" t SWL":fmt(r.structT,2)+" t crane steel")} unit="" v={gbp(rates.tRate*r.tBasisQty)}/>
+              <Row k="Build-up tender total" unit="" v={gbp(r.total)}/>
+              <Row k="Difference (£/t vs build-up)" unit="" v={isFinite(r.crossDiff)?fmt(r.crossDiff,0)+" %":"—"} strong/>
+            </dl>
+            <p className="text-xs text-slate-500 mt-2">If your £/t figure and the build-up disagree a lot, one of them needs a look — that gap is how we calibrate the rate card over time.</p>
+          </div>
+
+          <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-5 print-block">
+            <h2 className="font-bold text-slate-800 mb-2">Outline specification</h2>
+            <ul className="text-sm text-slate-600 space-y-0.5">
+              <li>Single-girder overhead travelling crane, {fmt0(spec.swl)} kg SWL</li>
+              <li>Span {fmt(spec.span,1)} m · HOL {fmt(spec.hol,1)} m · runway {fmt0(spec.runway)} m</li>
+              <li>Main girder: {r.g.ok?r.g.name+" (indicative)":"plate / double girder (over library)"}</li>
+              <li>Speeds — hoist {fmt0(spec.vHoist)} / cross {fmt0(spec.vCross)} / long {fmt0(spec.vLong)} m/min</li>
+              <li>Duty {spec.duty} · {spec.outdoor?"outdoor":"indoor"} · {fmt0(spec.supply)} V supply</li>
+              <li>≈ {fmt(r.structT,1)} t structural steel · ≈ {fmt(r.installedKW,1)} kW installed</li>
+            </ul>
+            <p className="text-[11px] text-slate-400 mt-3 border-t border-slate-100 pt-2">
+              Estimate only. Firm the structure in the Crane Loading Calculator, drives in the Crane Drive Sizer, and replace the
+              rate card with your costs. Phase 2 adds double-girder, gantry and jib/monorail; the same spec then expands into the
+              detailed-design tools.
+            </p>
+          </div>
+        </div>
+      </div>
+      <p className="text-center text-xs text-slate-400 pb-8">Levate Solutions Ltd · indicative estimate · not a fixed quotation.</p>
+    </div>
+  );
+}
+const Row=({k,unit,v,strong,badge})=>(
+  <React.Fragment>
+    <dt className={"text-slate-500 "+(strong?"font-semibold text-slate-700":"")}>{k}{badge&&<Badge tone={badge.tone}>{badge.t}</Badge>}</dt>
+    <dd className={"text-right font-mono "+(strong?"font-bold text-slate-800":"")}>{v}{unit&&<span className="text-slate-400 font-sans"> {unit}</span>}</dd>
+  </React.Fragment>
+);
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
