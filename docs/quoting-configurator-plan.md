@@ -169,7 +169,7 @@ known). Periodically tune `£/t`, margin and parametric curves from outcomes. Th
 - ~~Quote scope: single crane vs project~~ → **one quote = one crane for now**
   (Quote holds a single CraneSpec; multi-crane/project + options/spares deferred).
 - Delivery: pass-through (no margin) — confirm.
-- Currency / VAT handling; roles / permissions.
+- Roles / permissions.
 - Weight models for double-girder / gantry / jib.
 - Quote-doc boilerplate (inclusions/exclusions/lead time/validity/terms).
 
@@ -190,3 +190,4 @@ known). Periodically tune `£/t`, margin and parametric curves from outcomes. Th
 - Catalog presents matching options for the estimator to choose (not auto-pick);
   manual override always available.
 - Quotes are versioned: immutable revisions (Rev A/B/C), latest live = current.
+- Currency: GBP only for now (no multi-currency); quotes ex-VAT (VAT shown separately).
