@@ -110,12 +110,12 @@ NEVER marked up (charged at cost).**
 ```
 For each line:  sell = cost × (1 + lineMargin)
   • Steelwork (£/t_fab × fab tonnes)   → marginSteel       (default; ≈ £3,300/t steelwork only)
-  • Each bought-out component line      → marginBoughtOut   (default per category, editable per line)
+  • Each bought-out component line      → its OWN margin (per line/category, editable)
   • Labour — engineering + install      → margin = 0  (at cost)
   • Delivery                            → margin = 0  (pass-through)            [confirm]
 
 PRICE = Σ line sells
-Overhead: TBD — a separate % on cost, or folded into the line margins.
+Overhead is BAKED INTO the line margins — no separate overhead line/%.
 ```
 Two views: **internal cost breakdown** (cost, margin, sell per line) + **client
 price** (single figure or summarised). Old material+labour+paint build-up kept
@@ -159,9 +159,7 @@ known). Periodically tune `£/t`, margin and parametric curves from outcomes. Th
 - Catalog schema attributes per category + matching rules.
 - ~~Quote scope: single crane vs project~~ → **one quote = one crane for now**
   (Quote holds a single CraneSpec; multi-crane/project + options/spares deferred).
-- Margin per line: one rate for all bought-out, or per-line/per-category?
-- Overhead: separate % on cost, or folded into the line margins?
-- Delivery: pass-through (no margin) confirmed?
+- Delivery: pass-through (no margin) — confirm.
 - Quote revisions/versioning; currency/VAT; roles/permissions.
 - Weight models for double-girder / gantry / jib.
 - Quote-doc boilerplate (inclusions/exclusions/lead time/validity/terms).
@@ -178,5 +176,7 @@ known). Periodically tune `£/t`, margin and parametric curves from outcomes. Th
   calculators standalone and feeding it; quotes persisted → calibration loop.
 - Engine logic to be extracted into reusable pure modules shared by both.
 - One quote = one crane for now (single CraneSpec); multi-crane/project deferred.
+- Margin is per-line/per-category (each bought-out item its own); overhead baked
+  into the line margins (no separate overhead %); labour never marked up.
 - Catalog presents matching options for the estimator to choose (not auto-pick);
   manual override always available.
