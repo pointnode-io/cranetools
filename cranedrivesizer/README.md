@@ -19,6 +19,7 @@ Pick a mechanism tab and enter the duty. For each, it returns:
 | Gearbox ratio `i = n_motor / n_out` | ✓ | ✓ |
 | Minimum brake torque | ✓ | ✓ |
 | **Next standard motor** (IEC ladder) + breakdown-torque margin | ✓ | ✓ |
+| **Geared-motor spec** (n₂, ratio, output torque T₂N/T₂B, fₛ, radial load) for SEW/Nord/Demag | ✓ | ✓ |
 | Drives-per-mechanism load sharing | ✓ | ✓ |
 | Drum speed & lead-line rope pull | ✓ | — |
 | **Reeving** efficiency (derived from sheaves) + ratio | ✓ | — |

@@ -72,7 +72,7 @@ const reevingEff=(n,es,nDiv)=>{n=n||0;es=es||0;nDiv=nDiv||0;if(n<=0||es<=0||es>=
 const DEF={
   muAdh:0.15, fRoll:0.5, cFlange:1.5, bearMu:0.02, windP:250, brakeSFhoist:1.6,
   etaS:0.98, etaMech:0.90, vfdOverload:1.5, breakdownK:2.7, regenEff:0.0,
-  Zp:4.0, minDd:20, phi2min:1.1, beta2:0.34, kCool:0.33,
+  Zp:4.0, minDd:20, phi2min:1.1, beta2:0.34, kCool:0.33, fs:1.25,
 };
 
 // ── UI atoms ─────────────────────────────────────────────────────────────────
@@ -198,6 +198,13 @@ function computeHoist(h){
   const Tavail=Math.min(Tbreak||Infinity,(h.vfdOverload||0)*(Trated||0));
   const Taccbudget=Tavail-Math.abs(TstatDyn)/nDr;        // torque available for accel, per drive
   const aTq=(Taccbudget>0&&w>0&&Jload>0)?(Taccbudget*nDr*etaTot)/((h.Jmot||0)*nDr+Jload)*(vs/w):NaN; // m/s²
+  // gearbox output requirement (for a supplier quote) — torque at the DRUM shaft,
+  // taken directly from the rope tension so it's free of motor-efficiency bookkeeping.
+  const Rdrum=Ddm/2;
+  const gbT2cont=isFinite(Rdrum)?Slead*Rdrum:NaN;        // continuous output torque, N·m
+  const ratioPk=Math.abs(Tstat)>0?Tpeak/Math.abs(Tstat):NaN;
+  const gbT2peak=gbT2cont*ratioPk;                       // accel/peak output torque, N·m
+  const gbT2Nreq=gbT2cont*(h.fs||1);                     // T2N to select against (× service factor)
   // regen on lowering (continuous) — lowering loaded returns power to the line/resistor
   const PregenLower=Wnet>0?Wnet*vs*etaTot/1000:NaN;      // kW, steady lowering regen (load assists)
   // duty cycle / energy (indicative)
@@ -223,6 +230,7 @@ function computeHoist(h){
   if(motorKW&&!breakOK)warns.push("Peak torque exceeds the selected motor's breakdown torque — pick a larger frame or extend the accel time.");
   return {mGross,phi2,mNet,overhauling,etaReev,etaTot,Plift,Pmot,PmotMag,Tstat,a,Jload,Tacc,Tpeak,Ppeak,
     Slead,vrope,nDrum,i,MBLreq,SFact,ropeOK,ddActual,ddOK,Tload,Tbrake,
+    gbT2cont,gbT2peak,gbT2Nreq,
     nDr,PperDrive,TperDrivePeak,motorKW,Trated,Tbreak,breakOK,aTq,PregenLower,cyc,warns};
 }
 
@@ -277,6 +285,13 @@ function computeTravel(t){
   const ab=tb>0?vs/tb:NaN;
   const sStop=tb>0?vs*tb/2:NaN;
   const uSkidB=Fadh>0?(m*ab)/Fadh:NaN;
+  // gearbox output requirement (for a supplier quote) — torque at the WHEEL shaft
+  // from the tractive force, per driving gearbox.
+  const Rwheel=Dwm/2;
+  const gbT2cont=isFinite(Rwheel)?Fres*Rwheel/nDr:NaN;  // continuous output torque, N·m
+  const gbT2peak=isFinite(Rwheel)?Fdrive*Rwheel/nDr:NaN;// accel/peak output torque, N·m
+  const gbT2Nreq=gbT2cont*(t.fs||1);                    // T2N to select against (× service factor)
+  const wheelLoad=t.nW>0?W/t.nW:NaN;                    // per-wheel vertical load (output radial), N
   // regen on decel (kinetic energy)
   const Ekin=0.5*m*vs*vs/1000;                          // kJ
   const Eresist=Fres*(sStop||0)/1000;                   // kJ removed by resistance
@@ -302,6 +317,7 @@ function computeTravel(t){
   if(motorKW&&!breakOK)warns.push("Peak torque exceeds the selected motor's breakdown torque — pick a larger frame or extend the accel time.");
   return {m,W,vs,Froll,Fgrad,Fwind,Fres,Pstat,nWheel,i,Tstat,aReq,tAcc,Facc,Fdrive,Ppeak,Tacc,Tpeak,
     Ndriven,Fadh,uSkid,aMaxSkid,aTorque,aAchieve,accelLimitedBy,nDr,PperDriveStat,motorKW,Trated,Tbreak,breakOK,
+    gbT2cont,gbT2peak,gbT2Nreq,wheelLoad,
     ab,sStop,uSkidB,Ekin,Eregen,PregenPk,cyc,warns};
 }
 
@@ -334,7 +350,7 @@ function App(){
     hcEnable:true,phi2min:DEF.phi2min,beta2:DEF.beta2,
     mCw:0, brakeSF:DEF.brakeSFhoist,
     Zp:DEF.Zp,ropeDia:13,ropeMBL:130,minDd:DEF.minDd,
-    nDrives:1,breakdownK:DEF.breakdownK,
+    nDrives:1,breakdownK:DEF.breakdownK,fs:DEF.fs,
     vfd:true,accelMode:"time",accelRate:0.4,vfdOverload:DEF.vfdOverload,regenEff:DEF.regenEff,
     cycEnable:false,moveDist:6,dwell:20,kCool:DEF.kCool,cph:10,hpy:2000,tariff:0.30,
     ED:40,starts:150});
@@ -343,7 +359,7 @@ function App(){
   const ltDefaults={
     m:15000,v:40,nW:4,nD:2,Dw:250,rollMode:"calc",dJourn:60,bearMu:DEF.bearMu,fRoll:DEF.fRoll,cFlange:DEF.cFlange,wSpec:13,
     grad:0,outdoor:false,windP:DEF.windP,area:6,nMot:1450,etaMech:DEF.etaMech,muAdh:DEF.muAdh,Jmot:0.02,ta:5,tb:4,
-    nDrives:2,breakdownK:DEF.breakdownK,vfd:true,accelMode:"time",accelRate:0.4,vfdOverload:DEF.vfdOverload,regenEff:DEF.regenEff,
+    nDrives:2,breakdownK:DEF.breakdownK,fs:DEF.fs,vfd:true,accelMode:"time",accelRate:0.4,vfdOverload:DEF.vfdOverload,regenEff:DEF.regenEff,
     cycEnable:false,moveDist:20,dwell:15,kCool:DEF.kCool,cph:20,hpy:2000,tariff:0.30};
   const ctDefaults={...ltDefaults,m:5200,v:20,Dw:160,dJourn:40,area:2,Jmot:0.01,ta:2,tb:1.5,nDrives:2,moveDist:8,dwell:10};
   const [lt,setLt]=useState(ltDefaults);
@@ -522,10 +538,11 @@ function HoistTab({h,set,r}){
           </div>
         </Group>
 
-        <Group title="Drives & motor selection" open={false}>
+        <Group title="Drives, gearbox & motor selection" open={false}>
           <div className="grid grid-cols-2 gap-x-4">
             <Field label="Drives (motors)" hint="parallel units"><Num value={h.nDrives} min="1" step="1" onChange={e=>set("nDrives",e.target.value)}/></Field>
             <Field label="Breakdown torque" hint="× rated, motor pull-out"><Num value={h.breakdownK} min="1" step="0.1" onChange={e=>set("breakdownK",e.target.value)}/></Field>
+            <Field label="Gearbox service factor f_s" hint="application factor — confirm"><Num value={h.fs} min="1" step="0.05" onChange={e=>set("fs",e.target.value)}/></Field>
           </div>
         </Group>
 
@@ -585,6 +602,23 @@ function HoistTab({h,set,r}){
             {h.ropeMBL>0&&<Pill ok={r.ropeOK}>{r.ropeOK?"ROPE OK":"ROPE FAIL"}</Pill>}
             {h.ropeDia>0&&<Pill ok={r.ddOK}>{r.ddOK?"D/d OK":"D/d FAIL"}</Pill>}
           </div>
+        </div>
+
+        <div className="rounded-lg shadow-sm border-2 p-5 print-block" style={{borderColor:"#0369a1",background:"#f0f9ff"}}>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-bold text-slate-800">Geared-motor spec</h2>
+            <Badge tone="def">SEW / Nord / Demag</Badge>
+          </div>
+          <dl className="grid grid-cols-2 gap-y-2 text-sm">
+            <Row k="Motor power (per drive)" unit="kW" v={r.motorKW?fmt(r.motorKW,1):"—"} strong/>
+            <Row k="Output speed n₂" unit="rpm" v={fmt(r.nDrum,1)}/>
+            <Row k="Gear ratio i" unit=": 1" v={fmt(r.i,2)}/>
+            <Row k="Output torque (continuous)" unit="N·m" v={fmt(r.gbT2cont,0)}/>
+            <Row k={"Select gearbox T₂N ≥ (× f_s "+fmt(h.fs,2)+")"} unit="N·m" v={fmt(r.gbT2Nreq,0)} strong/>
+            <Row k="Output torque (accel/peak) T₂B" unit="N·m" v={fmt(r.gbT2peak,0)}/>
+            <Row k="Brake torque (motor shaft)" unit="N·m" v={fmt(r.Tbrake,1)}/>
+          </dl>
+          <p className="text-xs text-slate-500 mt-2">Hand these to the supplier with the duty (%ED &amp; starts/hour from the duty panel). Output torque is taken from the rope tension at the drum, independent of motor losses.</p>
         </div>
 
         <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-5 print-block">
@@ -686,10 +720,11 @@ function TravelTab({t,set,r,title,massHint}){
           </div>
         </Group>
 
-        <Group title="Drives & motor selection" open={false}>
+        <Group title="Drives, gearbox & motor selection" open={false}>
           <div className="grid grid-cols-2 gap-x-4">
             <Field label="Drives (motors)" hint="parallel units"><Num value={t.nDrives} min="1" step="1" onChange={e=>set("nDrives",e.target.value)}/></Field>
             <Field label="Breakdown torque" hint="× rated"><Num value={t.breakdownK} min="1" step="0.1" onChange={e=>set("breakdownK",e.target.value)}/></Field>
+            <Field label="Gearbox service factor f_s" hint="SEW f_B / application — confirm"><Num value={t.fs} min="1" step="0.05" onChange={e=>set("fs",e.target.value)}/></Field>
           </div>
         </Group>
 
@@ -763,6 +798,23 @@ function TravelTab({t,set,r,title,massHint}){
             {t.vfd&&<Row k="Regen energy / stop" unit="kJ" v={fmt(r.Eregen,1)} badge={{t:"→ resistor",tone:""}}/>}
             {t.vfd&&<Row k="Peak regen power" unit="kW" v={fmt(r.PregenPk,1)}/>}
           </dl>
+        </div>
+
+        <div className="rounded-lg shadow-sm border-2 p-5 print-block" style={{borderColor:"#0369a1",background:"#f0f9ff"}}>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-bold text-slate-800">Geared-motor spec</h2>
+            <Badge tone="def">SEW / Nord / Demag</Badge>
+          </div>
+          <dl className="grid grid-cols-2 gap-y-2 text-sm">
+            <Row k="Motor power (per drive)" unit="kW" v={r.motorKW?fmt(r.motorKW,1):"—"} strong/>
+            <Row k="Output speed n₂" unit="rpm" v={fmt(r.nWheel,1)}/>
+            <Row k="Gear ratio i" unit=": 1" v={fmt(r.i,2)}/>
+            <Row k="Output torque (continuous)" unit="N·m" v={fmt(r.gbT2cont,0)}/>
+            <Row k={"Select gearbox T₂N ≥ (× f_s "+fmt(t.fs,2)+")"} unit="N·m" v={fmt(r.gbT2Nreq,0)} strong/>
+            <Row k="Output torque (accel/peak) T₂B" unit="N·m" v={fmt(r.gbT2peak,0)}/>
+            <Row k="Output radial load (wheel)" unit="kN" v={fmt(r.wheelLoad/1000,2)}/>
+          </dl>
+          <p className="text-xs text-slate-500 mt-2">Hand these to the supplier with the duty (%ED &amp; starts/hour from the duty panel). Travel output torque is the tractive force × wheel radius, per driving gearbox.</p>
         </div>
 
         {t.cycEnable&&r.cyc&&(
