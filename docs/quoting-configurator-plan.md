@@ -120,8 +120,9 @@ summarised on the quote). Old material+labour+paint build-up kept only to
 
 ## 5. Component selection logic
 Per bought-in line, **source precedence**:
-1. **Catalog** — auto-match from Supabase by spec (e.g. hoist where `swl ≥ req`
-   AND `femGroup ≥ req`; prefer `status=preferred`, else cheapest). User can swap.
+1. **Catalog** — query Supabase by spec (e.g. hoist where `swl ≥ req` AND
+   `femGroup ≥ req`) and **present the matching options for the estimator to
+   choose** (filtered & sorted, `preferred` first). Not auto-picked.
 2. **Manual (special)** — override the price, or add a free-text special item
    (description + price + optional supplier/part no.). Saved with the quote;
    **promotable** into the catalog later.
