@@ -141,7 +141,7 @@ function compute(spec,rates){
   const total=cost+margin;
   const perTonneSWL=SWLt>0?total/SWLt:NaN;
   const perKgCrane=structWt>0?total/structWt:NaN;
-  // £/tonne rule-of-thumb cross-check (your current method)
+  // £/tonne rule-of-thumb cross-check (your current method — £/t of FABRICATION)
   const tBasisQty=(spec.tBasis==="swl")?SWLt:structT;
   const crossTotal=(rates.tRate||0)*tBasisQty;
   const crossDiff=total>0?(crossTotal-total)/total*100:NaN;
@@ -202,7 +202,7 @@ function App(){
     vHoist:8,vCross:20,vLong:40,
     duty:"medium",grade:275,gammaM:1.05,defLim:600,phi:1.15,
     etaHoist:0.75,travelFactor:1.3,ecFactor:0.25,miscFactor:0.10,
-    outdoor:false,supply:400,tBasis:"swl"});
+    outdoor:false,supply:400,tBasis:"fab"});
   const setS=(k,v)=>setSpec({...spec,[k]:(typeof v==="string"||typeof v==="boolean")?v:(v===""?"":Number(v))});
 
   const [rates,setRates]=useState({...RATES});
@@ -314,12 +314,12 @@ function App(){
           </Group>
 
           <Group title="£/tonne cross-check (your current method)" open={true}>
-            <p className="text-xs text-slate-400 mb-2">Your rule-of-thumb £/t, compared against the build-up above. <Badge tone="def">enter your figure</Badge></p>
+            <p className="text-xs text-slate-400 mb-2">Your rule-of-thumb £/t of fabrication, compared against the build-up above. <Badge tone="def">enter your figure</Badge></p>
             <div className="flex gap-2 mb-2">
+              <button onClick={()=>setS("tBasis","fab")} className={"text-xs px-2 py-1 rounded border "+(spec.tBasis==="fab"?"bg-amber-500 text-white border-amber-500":"bg-white text-slate-600 border-slate-300")}>per tonne fabrication</button>
               <button onClick={()=>setS("tBasis","swl")} className={"text-xs px-2 py-1 rounded border "+(spec.tBasis==="swl"?"bg-amber-500 text-white border-amber-500":"bg-white text-slate-600 border-slate-300")}>per tonne SWL</button>
-              <button onClick={()=>setS("tBasis","crane")} className={"text-xs px-2 py-1 rounded border "+(spec.tBasis==="crane"?"bg-amber-500 text-white border-amber-500":"bg-white text-slate-600 border-slate-300")}>per tonne crane steel</button>
             </div>
-            <Rate label={"£/tonne ("+(spec.tBasis==="swl"?"SWL":"crane steel")+")"} unit="£/t" value={rates.tRate} step="250" onChange={e=>setR("tRate",e.target.value)}/>
+            <Rate label={"£/tonne ("+(spec.tBasis==="swl"?"SWL":"fabrication")+")"} unit="£/t" value={rates.tRate} step="250" onChange={e=>setR("tRate",e.target.value)}/>
           </Group>
         </div>
 
@@ -370,7 +370,7 @@ function App(){
           <div className="rounded-lg shadow-sm border-2 p-5 print-block" style={{borderColor:"#0369a1",background:"#f0f9ff"}}>
             <h2 className="font-bold text-slate-800 mb-2">£/tonne cross-check <Badge tone="def">your method</Badge></h2>
             <dl className="grid grid-cols-2 gap-y-1.5 text-sm">
-              <Row k={"Rate × "+(spec.tBasis==="swl"?fmt(r.SWLt,2)+" t SWL":fmt(r.structT,2)+" t crane steel")} unit="" v={gbp(rates.tRate*r.tBasisQty)}/>
+              <Row k={"Rate × "+(spec.tBasis==="swl"?fmt(r.SWLt,2)+" t SWL":fmt(r.structT,2)+" t fabrication")} unit="" v={gbp(rates.tRate*r.tBasisQty)}/>
               <Row k="Build-up tender total" unit="" v={gbp(r.total)}/>
               <Row k="Difference (£/t vs build-up)" unit="" v={isFinite(r.crossDiff)?fmt(r.crossDiff,0)+" %":"—"} strong/>
             </dl>
