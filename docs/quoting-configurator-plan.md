@@ -120,8 +120,8 @@ NEVER marked up (charged at cost).**
 For each line:  sell = cost × (1 + lineMargin)
   • Steelwork (£/t_fab × fab tonnes)   → marginSteel       (default; ≈ £3,300/t steelwork only)
   • Each bought-out component line      → its OWN margin (per line/category, editable)
-  • Labour — engineering + install      → margin = 0  (at cost)
-  • Delivery                            → margin = 0  (pass-through)            [confirm]
+  • Labour — engineering + install/commission → margin = 0  (at cost)
+  • Delivery (grouped in the Installation section) → marked up (its own margin)
 
 PRICE = Σ line sells
 Overhead is BAKED INTO the line margins — no separate overhead line/%.
@@ -168,7 +168,6 @@ known). Periodically tune `£/t`, margin and parametric curves from outcomes. Th
 - Catalog schema attributes per category + matching rules.
 - ~~Quote scope: single crane vs project~~ → **one quote = one crane for now**
   (Quote holds a single CraneSpec; multi-crane/project + options/spares deferred).
-- Delivery: pass-through (no margin) — confirm.
 - Weight models for double-girder / gantry / jib.
 - Quote-doc boilerplate (inclusions/exclusions/lead time/validity/terms).
 
@@ -192,3 +191,5 @@ known). Periodically tune `£/t`, margin and parametric curves from outcomes. Th
 - Currency: GBP only for now (no multi-currency); quotes ex-VAT (VAT shown separately).
 - One role for now (all users can quote + edit catalog/rates); tiered/per-tool
   permission levels planned for later.
+- Delivery is marked up (its own margin) and sits in the Installation section;
+  install/commission labour stays at cost.
