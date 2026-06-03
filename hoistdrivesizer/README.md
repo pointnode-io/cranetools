@@ -25,6 +25,12 @@ From the load, geometry, motion and motor/gearbox/brake data it returns:
   proof load* (≈ 1.25 × static load torque) and *exceeds the static load torque*,
   with PASS/FAIL on each.
 - **Overload / proof** — rated, operational-overload (110%) and proof (125%) loads.
+- **87 Hz technique (delta)** — optional. Extends the constant-torque speed range
+  and continuous power by `k = V_supply/V_delta` (≈ √3) — **torque is unchanged,
+  only speed & power increase**. Reports the 87 Hz base frequency, extended base
+  speed, power capability (× k), and the **required inverter current (√3 × rated)**.
+  Lets a smaller motor frame meet the duty (at the cost of a larger drive); warns
+  if the operating point goes into field weakening.
 
 ## It will not undersize
 

@@ -72,6 +72,24 @@ otherwise-unused input, so it is folded into the load. Flagged in the UI.
   (EN 14492-2 / EN 13001 / EN 13135), so they are confirmed by the user, not
   asserted as normative.
 
+## 87 Hz technique (delta)
+
+Optional toggle (`hz87`). A Δ-connected dual-voltage motor (e.g. 230/400) on a
+VFD, holding V/f to the supply voltage at `f87 = (V_supply/V_delta)·f_base`
+(≈ 87 Hz for 400/230 @ 50). **It extends speed and power only — torque is
+unchanged.** Implementation invariant:
+
+- `k = V_supply/V_delta` (≈ √3). Extended base speed `n_rated·k`; continuous
+  **power capability `= nameplate·k`** held at **constant rated torque** to f87.
+- **Torque (rated / peak / stall) is NOT scaled** — do not apply `k` to any
+  torque. The stall-margin and brake checks are unaffected by 87 Hz.
+- **Inverter current must be the delta current `= √3 · I_star`** (input
+  `I_motor_rated`) — the trade is a smaller motor for a bigger drive.
+- The recommended motor frame is `pickMotorUp(P_req / k)` (a smaller nameplate
+  suffices because it yields `×k` power). Warn if the operating speed exceeds
+  the 87 Hz base speed (then it is in field weakening, torque ∝ 1/f). Re-check
+  the gear ratio and the **gearbox thermal rating** at the higher speed/power.
+
 ## Scope / non-goals
 
 A sizing & first-pass verification aid. It does **not** classify duty (use the

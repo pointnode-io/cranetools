@@ -107,8 +107,17 @@ function compute(x){
   const P_rms_W=isFinite(M_rms)?M_rms*omegaRated:NaN;              // W, thermal basis at rated speed
   // GOVERNING required power = the larger of duty and thermal → never undersized
   const P_motor_req=Math.max(isFinite(P_duty)?P_duty:0, isFinite(P_rms_W)?P_rms_W:0)||NaN; // W
-  const P_motor_rec=pickMotorUp(P_motor_req/1000);                // next standard size up, kW
-  const power_ok=isFinite(motorRatedKW)&&motorRatedKW>=P_motor_req/1000;
+  // ── 87 Hz technique (delta) ── extends SPEED & POWER only; TORQUE is unchanged.
+  // Δ-connected dual-voltage motor on a VFD: hold V/f to V_supply at f87 = (V_supply/V_delta)·f_base.
+  // Rated torque is held to f87, so base speed and continuous power scale by k = V_supply/V_delta (≈√3).
+  // The inverter must carry the delta current = √3 × the star (nameplate) current.
+  const k87=x.hz87?((x.V_supply||400)/(x.V_delta||230)):1;
+  const f87=((x.V_supply||400)/(x.V_delta||230))*(x.f_base||50);
+  const nBaseEff=(x.n_motor_rated||0)*k87;                          // constant-torque base speed
+  const Pcap=motorRatedKW*k87;                                      // continuous power capability, kW
+  const I_inv_req=x.hz87?Math.sqrt(3)*(x.I_motor_rated||0):(x.I_motor_rated||0); // inverter current, A
+  const P_motor_rec=pickMotorUp((P_motor_req/1000)/k87);           // nameplate frame to buy (gives ×k power)
+  const power_ok=isFinite(Pcap)&&Pcap>=P_motor_req/1000;
   const thermalUtil=isFinite(M_rms)&&x.M_motor_rated>0?M_rms/x.M_motor_rated:NaN;
   const thermal_ok=isFinite(thermalUtil)&&thermalUtil<=1;
   const ed_ok=isFinite(ED)&&ED<=(x.motor_ED||0);
@@ -137,10 +146,14 @@ function compute(x){
   if(isFinite(n_motor_rpm)&&x.n_motor_rated>0&&n_motor_rpm<0.2*x.n_motor_rated)
     warns.push("Motor speed at hoisting velocity ("+fmt0(n_motor_rpm)+" rpm) < 20% of rated — choose a different ratio or oversize the inverter.");
   if(x.fieldWeak)warns.push("Field weakening: stall torque falls above base speed — check the motor torque–speed curve.");
+  if(x.hz87&&isFinite(n_motor_rpm)&&n_motor_rpm>nBaseEff*1.0001)
+    warns.push("Operating speed ("+fmt0(n_motor_rpm)+" rpm) is above the 87 Hz base speed ("+fmt0(nBaseEff)+" rpm) — you are in field weakening, torque falls ∝ 1/f. Lower the gear ratio or accept reduced torque.");
+  if(x.hz87&&!(x.I_motor_rated>0))warns.push("Enter the motor rated (star) current so the required inverter (delta) current can be sized.");
 
   return {mLoad,mStat,mDyn,P_static,P_dynamic,P_total,P_regen,M_drum_static,M_drum_dynamic,M_drum_total,n_load,
     J_load,i_opt,fB,fB_ok,gbTorqueReq,gbTorque_ok,n_motor_rpm,M_motor_static,M_motor_dyn,M_motor_peak,M_motor_lower,
     M_rms,ED,stallMargin,stall_ok,motorRatedKW,P_duty,P_motor_req,P_motor_rec,power_ok,thermalUtil,thermal_ok,ed_ok,
+    k87,f87,nBaseEff,Pcap,I_inv_req,
     M_load_motor,M_load_proof,req_2x,req_proof,req_static,brakeReq,brake_2x_ok,brake_proof_ok,brake_static_ok,
     load_proof,load_over,warns};
 }
@@ -198,7 +211,8 @@ function App(){
     i_gear:57,M_gearbox_rated:5000,fB_min:1.0,
     M_brake_rated:160,brakeFactor:2.0,proofFactor:1.25,overloadFactor:1.10,
     t_hoist:20,t_lower:20,t_rest:20,kCool:0.33,stallFactor:1.3,
-    control:"vector",fieldWeak:false});
+    control:"vector",fieldWeak:false,
+    hz87:false,V_supply:400,V_delta:230,f_base:50,I_motor_rated:15});
   const set=(k,val)=>setX({...x,[k]:(typeof val==="boolean"||typeof val==="string")?val:(val===""?"":Number(val))});
   const r=useMemo(()=>compute(x),[x]);
 
@@ -272,6 +286,17 @@ function App(){
               <Toggle on={x.control==="vf"} onClick={()=>set("control","vf")}>V/f</Toggle>
               <label className="flex items-center gap-1 text-xs text-slate-600 ml-2"><input type="checkbox" checked={x.fieldWeak} onChange={e=>set("fieldWeak",e.target.checked)}/> field weakening</label>
             </div>
+            <label className="flex items-center gap-2 text-sm text-slate-700 mt-2">
+              <input type="checkbox" checked={x.hz87} onChange={e=>set("hz87",e.target.checked)}/> 87 Hz technique (delta) — extend speed &amp; power
+            </label>
+            {x.hz87&&(
+              <div className="grid grid-cols-2 gap-x-4 mt-1">
+                <Field label="Supply voltage" hint="V (VFD output)"><Num value={x.V_supply} min="0" step="10" onChange={e=>set("V_supply",e.target.value)}/></Field>
+                <Field label="Motor delta voltage" hint="V (lower of Δ/Y)"><Num value={x.V_delta} min="0" step="5" onChange={e=>set("V_delta",e.target.value)}/></Field>
+                <Field label="Base frequency" hint="Hz"><Num value={x.f_base} min="0" step="1" onChange={e=>set("f_base",e.target.value)}/></Field>
+                <Field label="Motor rated (star) current" hint="A, nameplate"><Num value={x.I_motor_rated} min="0" step="0.5" onChange={e=>set("I_motor_rated",e.target.value)}/></Field>
+              </div>
+            )}
           </Group>
           <Group title="Gearbox" open={false}>
             <div className="grid grid-cols-2 gap-x-4">
@@ -339,15 +364,31 @@ function App(){
               <Row k="Duty-basis power" unit="kW" v={fmt(r.P_duty/1000,2)}/>
               <Row k="Thermal (RMS) power" unit="kW" v={fmt(r.M_rms*2*Math.PI*(x.n_motor_rated||0)/60/1000,2)}/>
               <Row k="Required power (governing)" unit="kW" v={fmt(r.P_motor_req/1000,2)} strong badge={{t:"no margin added",tone:""}}/>
-              <Row k="Smallest standard motor ≥" unit="kW" v={r.P_motor_rec?fmt(r.P_motor_rec,1):"—"} strong badge={{t:"IEC",tone:"def"}}/>
-              <Row k="↳ utilisation at that size" unit="%" v={r.P_motor_rec?fmt(100*r.P_motor_req/1000/r.P_motor_rec,0):"—"}/>
-              <Row k="Motor rated power (entered)" unit="kW" v={fmt(r.motorRatedKW,2)} ok={r.power_ok}/>
+              <Row k="Smallest standard motor ≥" unit="kW" v={r.P_motor_rec?fmt(r.P_motor_rec,1):"—"} strong badge={{t:x.hz87?"IEC, ÷k":"IEC",tone:"def"}}/>
+              <Row k="↳ utilisation at that size" unit="%" v={r.P_motor_rec?fmt(100*r.P_motor_req/1000/(r.P_motor_rec*r.k87),0):"—"}/>
+              <Row k="Motor rated power (entered)" unit="kW" v={fmt(r.motorRatedKW,2)} ok={x.hz87?undefined:r.power_ok}/>
+              {x.hz87&&<Row k="↳ power capability at 87 Hz" unit="kW" v={fmt(r.Pcap,2)} ok={r.power_ok} badge={{t:"×"+fmt(r.k87,2),tone:""}}/>}
               <Row k={"Stall margin (≥"+fmt(x.stallFactor,2)+")"} unit="×" v={fmt(r.stallMargin,2)} ok={r.stall_ok}/>
               <Row k="Thermal utilisation (RMS)" unit="%" v={fmt(r.thermalUtil*100,0)} ok={r.thermal_ok}/>
               <Row k={"Duty %ED (≤"+fmt0(x.motor_ED)+")"} unit="%" v={fmt(r.ED,0)} ok={r.ed_ok}/>
             </dl>
             <p className="text-xs text-slate-400 mt-2">Required power carries <b>no added margin</b> — it is the true demand (larger of duty and thermal-RMS). The standard size is just the <b>smallest IEC frame that meets it</b> (not deliberate oversizing); the utilisation shows the headroom. The PASS/FAIL above tests the motor <b>you enter</b> against the requirement, so you can fit an exact/special motor if it's more economical — anything ≥ the requirement passes.</p>
           </div>
+
+          {x.hz87&&(
+            <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-5 print-block">
+              <h2 className="font-bold text-slate-800 mb-2">87 Hz technique (delta) <Badge>torque unchanged</Badge></h2>
+              <dl className="grid grid-cols-2 gap-y-1.5 text-sm">
+                <Row k="87 Hz base frequency" unit="Hz" v={fmt(r.f87,1)} badge={{t:"√3 × f",tone:""}}/>
+                <Row k="Extended base speed" unit="rpm" v={fmt0(r.nBaseEff)} strong badge={{t:"constant torque",tone:""}}/>
+                <Row k="Speed/power factor k" unit="" v={fmt(r.k87,3)}/>
+                <Row k="Power capability (× k)" unit="kW" v={fmt(r.Pcap,2)} strong/>
+                <Row k="Operating speed at v" unit="rpm" v={fmt0(r.n_motor_rpm)}/>
+                <Row k="Required inverter current" unit="A" v={fmt(r.I_inv_req,1)} strong badge={{t:"√3 × rated",tone:""}}/>
+              </dl>
+              <p className="text-xs text-slate-500 mt-2">Rated torque is held to the 87 Hz base speed, so <b>torque (rated / peak / stall) is unchanged</b> — only the speed range and continuous power extend (×k ≈ √3). Size the <b>inverter for the delta current</b> shown, and re-check the gear ratio and the <b>gearbox thermal rating</b> at the higher speed/power.</p>
+            </div>
+          )}
 
           <div className="rounded-lg shadow-sm border-2 p-5 print-block" style={{borderColor:(r.brake_2x_ok&&r.brake_proof_ok&&r.brake_static_ok)?"#16a34a":"#dc2626",background:(r.brake_2x_ok&&r.brake_proof_ok&&r.brake_static_ok)?"#f0fdf4":"#fef2f2"}}>
             <div className="flex items-center justify-between mb-2">
