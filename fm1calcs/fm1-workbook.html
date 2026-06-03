@@ -17,34 +17,27 @@ const {useState,useMemo}=React;
 
 /* ═══════════════════════════════════════════════════════════════════════════
    FM1 DESIGN WORKBOOK  —  proof of competence for lifting structures
-   to BS 2853:1957 (inc. amm. 1–4). A live re-build of the firm's "Form FM1"
-   spreadsheet. Every formula is reproduced from the original sheet's printed
-   algebra and verified against its stored cell values (see selfTest()).
+   to BS 2853:1957 (inc. amendments 1–4). A live re-build of the firm's
+   "Form FM1" spreadsheet. Every formula was read from the original .xls cell
+   formulas (via Excel COM) and is checked against its stored value by selfTest().
 
-   IMPORTANT — the original paper form is NOT internally consistent about which
-   load feeds which cell. These mappings are reproduced EXACTLY so the tool ties
-   out to the firm's historical signed calculations:
-     • Required Ixx (sizing)  → rounded "design load"  W_des
-     • Bending Pbc check       → actual total incl. duty %  (EXCEPT Simply
-                                   Supported, which uses W_des — a sheet quirk)
-     • Flange-load check       → actual total  (EXCEPT Cantilever → W_des)
-     • Deflection check        → actual total
-   See per-sheet `notes` and the Cantilever bending warning below.
+   The original form is NOT internally consistent about which load feeds which
+   cell. These mappings are reproduced EXACTLY so the tool ties out to the firm's
+   historical signed calculations — see per-sheet config and the load-basis notes.
    ═══════════════════════════════════════════════════════════════════════════ */
 
-const E_STEEL = 2100;       // Young's modulus, t/cm²  ("E = (steel)")
-const FLANGE_ALLOW = 2.2;   // Max allowable flange stress, t/cm² (SHT1 note)
+const E_STEEL = 2100;       // Young's modulus, t/cm²
+const FLANGE_ALLOW = 2.2;   // Max allowable flange stress, t/cm²
+const G = 9.812;            // gravity used by the A-frame sheet (N/kg)
 
-// Universal Beams — depth/width/flange (mm), Ix (cm⁴), Zx (cm³), ry (cm).
-// Source: workbook "Section misc" register.
+// Universal Beams — depth/width/flange (mm), Ix (cm⁴), Zx (cm³), ry (cm). From "Section misc".
 const UBDATA=[["127x76x13",127.0,76.2,7.6,477.0,75.0,1.83],["152x89x16",152.0,89.0,7.7,834.0,109.0,2.1],["178x102x19",177.8,101.6,7.9,1357.0,153.0,2.39],["203x102x23",203.2,101.6,9.3,2091.0,206.0,2.37],["203x133x25",203.2,133.4,7.8,2356.0,231.9,3.1],["203x133x30",206.8,133.8,9.6,2887.0,279.3,3.18],["254x102x22",254.0,101.6,6.8,2867.0,225.7,2.05],["254x102x28",260.4,102.1,10.0,4008.0,307.9,2.22],["254x146x31",251.5,146.1,8.6,4439.0,353.1,3.35],["254x146x37",256.0,146.4,10.9,5556.0,434.0,3.47],["254x146x43",259.6,147.0,12.7,6544.0,504.0,3.52],["305x102x28",308.9,101.9,8.9,5421.0,351.0,2.08],["305x102x33",312.7,102.4,10.8,6487.0,415.0,2.15],["305x127x42",306.6,124.3,12.1,8143.0,531.2,2.7],["305x165x40",303.8,165.1,10.2,8523.0,561.2,3.85],["305x165x46",307.1,165.7,11.8,9948.0,647.9,3.9],["305x165x54",310.9,166.8,13.7,11710.0,753.3,3.94],["356x127x33",348.5,125.4,8.5,8200.0,470.6,2.59],["356x127x39",352.8,126.0,10.7,10087.0,571.8,2.69],["356x171x45",352.0,171.0,9.7,12091.0,686.9,3.78],["356x171x51",355.6,171.5,11.5,14156.0,796.2,3.87],["356x171x57",358.6,172.1,13.0,16077.0,896.5,3.92],["356x171x67",364.0,173.2,15.7,19522.0,1073.0,3.99],["406x140x39",397.3,141.8,8.6,12452.0,626.9,2.89],["406x178x54",402.6,177.6,10.9,18626.0,925.3,3.85],["406x178x60",406.4,177.8,12.8,21508.0,1058.0,3.97],["406x178x67",409.4,178.8,14.3,24329.0,1188.0,4.0],["406x178x74",412.8,179.7,16.0,27329.0,1324.0,4.03],["452x152x60",454.7,152.9,13.3,25464.0,1120.0,3.23],["452x152x67",457.2,151.9,15.0,28577.0,1250.0,3.21],["452x191x67",453.6,189.9,12.7,29401.0,1296.0,4.12],["452x191x82",460.2,191.3,16.0,37103.0,1612.0,4.23],["452x191x89",463.6,192.0,17.7,41021.0,1770.0,4.28],["452x191x98",467.4,192.8,19.6,45717.0,1956.0,4.33],["533x210x82",528.3,208.7,13.2,47491.0,1798.0,4.38],["533x210x90",533.1,209.3,15.6,55353.0,2076.0,4.51],["533x210x101",536.7,210.1,17.4,61659.0,2298.0,4.56],["533x210x109",539.5,210.7,18.8,66739.0,2477.0,4.6],["533x210x122",544.0,212.0,21.3,76040.0,2793.0,4.67],["610x229x101",602.2,227.6,14.8,75720.0,2515.0,4.75],["610x229x125",611.9,229.0,19.6,98579.0,3222.0,4.96],["610x305x149",609.6,304.8,19.7,124660.0,4090.0,6.99],["610x305x179",617.5,307.0,23.6,151631.0,4911.0,7.3],["686x254x152",687.6,254.5,21.0,150319.0,4372.0,5.46],["762x267x147",753.9,265.3,17.5,168966.0,4483.0,5.39]];
 const UB=UBDATA.map(r=>({n:r[0],depth:r[1],width:r[2],flange:r[3],Ix:r[4],Zx:r[5],ry:r[6]}));
 
-// Table 1 — Allowable bending stress Pbc (t/cm²) for BS15 steel, by l/ry × D/T.
+// Table 1 — Allowable bending stress Pbc (t/cm²), BS15 steel, by l/ry × D/T.
 const T1LRY=[85,90,95,100,105,110,115,120,130,140,150,160,170,180,190,200,210,220,230,240,250,260,270,280,290,300];
 const T1DT=[10,15,20,25,30,35,40,50];
 const T1V=[[1.6191,1.6191,1.6191,1.6191,1.6191,1.6191,1.6191,1.6191],[1.6191,1.6191,1.6191,1.5729,1.5729,1.5729,1.5729,1.5729],[1.6191,1.6191,1.6191,1.5266,1.5266,1.5266,1.5266,1.5266],[1.6191,1.6191,1.6191,1.4649,1.4649,1.4649,1.4649,1.4649],[1.6191,1.6191,1.5729,1.4187,1.4187,1.4187,1.4187,1.4187],[1.6191,1.6191,1.5266,1.3724,1.3724,1.3724,1.3724,1.3724],[1.6191,1.6191,1.4958,1.3261,1.3261,1.3261,1.3261,1.3261],[1.6191,1.5883,1.4495,1.2645,1.2645,1.2645,1.2645,1.2645],[1.6191,1.5112,1.357,1.1719,1.1719,1.1719,1.1719,1.1719],[1.5574,1.4341,1.2799,1.064,1.064,1.064,1.064,1.064],[1.4803,1.357,1.1874,0.9715,0.9715,0.9715,0.9715,0.9715],[1.4187,1.2799,1.1103,0.9098,0.8635,0.8635,0.8635,0.8635],[1.357,1.2182,1.0177,0.8635,0.8019,0.771,0.771,0.771],[1.2953,1.1411,0.9406,0.8327,0.771,0.7247,0.6785,0.6785],[1.2336,1.064,0.8944,0.8019,0.7247,0.6785,0.6322,0.586],[1.1565,0.9869,0.8635,0.7556,0.7093,0.6476,0.6014,0.5397],[1.1411,0.9561,0.8327,0.7247,0.6631,0.6168,0.5705,0.5243],[1.1103,0.9252,0.8019,0.7093,0.6322,0.586,0.5551,0.478],[1.0948,0.9098,0.771,0.6785,0.6168,0.5551,0.5089,0.4626],[1.064,0.879,0.7556,0.6476,0.586,0.5397,0.478,0.4318],[1.0486,0.8635,0.7247,0.6322,0.5705,0.5089,0.4626,0.4163],[1.0332,0.8481,0.6939,0.6168,0.5397,0.4934,0.4472,0.4009],[1.0177,0.8173,0.6785,0.586,0.5089,0.4626,0.4318,0.3855],[1.0023,0.8019,0.6631,0.5705,0.4934,0.4472,0.4163,0.3701],[0.9869,0.7864,0.6322,0.5551,0.478,0.4318,0.4009,0.3547],[0.9715,0.7556,0.6168,0.5397,0.4626,0.4163,0.3855,0.3392]];
-
 function pbcLookup(lry,dt){
   const clamp=(x,a,b)=>Math.max(a,Math.min(b,x));
   const off = lry>300 || lry<85 || dt>50 || dt<10;
@@ -55,127 +48,184 @@ function pbcLookup(lry,dt){
   const b=T1V[r1][c0]+(T1V[r1][c1]-T1V[r1][c0])*tc;
   return {v:a+(b-a)*tr, off};
 }
-
-/* ── Per-sheet configuration (the only thing that differs between beam forms) ── */
-const SHEETS=[
-  {id:"crane", tab:"1 · Crane Beam", title:"Crane Beam", model:"central", duty:0.25,
-   pbcLoad:"actual", flangeLoad:"actual", addedLabel:"Added load (HOL / crab)",
-   ixxF:"W.L³ / 48.E.s", deflF:"W.L³ / 48.E.Ixx", pbcF:"W.L / 4.Zxx",
-   d:{swl:2000,added:350,designKg:3000,spanMm:18000,deflDiv:750,section:"610x229x125",C:0.5,K2:1.15},
-   notes:["Worst case: hoist at mid-span — central point load, simply supported."]},
-
-  {id:"runway", tab:"3 · Runway Beam", title:"Runway Beam", model:"central", duty:0.25,
-   pbcLoad:"actual", flangeLoad:"actual", addedLabel:"Added load (HOL / crab)",
-   ixxF:"W.L³ / 48.E.s", deflF:"W.L³ / 48.E.Ixx", pbcF:"W.L / 4.Zxx",
-   d:{swl:1500,added:75,designKg:2000,spanMm:5000,deflDiv:500,section:"254x102x28",C:0.5,K2:1.15},
-   notes:["Same engine as the crane beam (central point load), L/500 deflection."]},
-
-  {id:"simple", tab:"7 · Simply Supported", title:"Simply Supported Beam", model:"central", duty:0.25,
-   pbcLoad:"design", flangeLoad:"actual", addedLabel:"Added load (½ crane beam)",
-   ixxF:"W.L³ / 48.E.s", deflF:"W.L³ / 48.E.Ixx", pbcF:"W.L / 4.Zxx",
-   d:{swl:1600,added:150,designKg:2200,spanMm:2530,deflDiv:500,section:"152x89x16",C:0.5,K2:1.15},
-   notes:["Sheet quirk: the bending-stress cell references the rounded design load, not the actual total — reproduced as-is."]},
-
-  {id:"cantilever", tab:"6 · Cantilever", title:"Cantilever Beam", model:"cantilever", duty:0.25,
-   pbcLoad:"actual", flangeLoad:"design", addedLabel:"Added load (HOL / crab)",
-   ixxF:"W.L³ / 3.E.s", deflF:"W.L³ / 3.E.Ixx", pbcF:"W.L / 4.Zxx",
-   d:{swl:333,added:50,designKg:480,spanMm:1000,deflDiv:250,section:"203x133x25",C:0.5,K2:1.15},
-   notes:["Tip point load. Sizing & deflection use the correct cantilever 1/3 factor.",
-          "⚠ The original bending-stress cell uses the crane-beam W.L/4.Zxx factor. A true cantilever moment is W.L, so the correct stress is 4× higher (shown below). Reproduced as-is for audit parity — confirm with the responsible engineer."]},
-
-  {id:"gantry", tab:"2 · Gantry Beam", title:"Gantry Beam", model:"gantry", duty:0,
-   pbcLoad:"actual", flangeLoad:"actual", addedLabel:"Added load (½ crane beam + end carriage)",
-   ixxF:"W₁.a².(3L−4a) / 6.E.s", deflF:"W₁.a².(3L−4a) / 6.E.Ixx", pbcF:"(10%W).L / 4.Zxx",
-   d:{swl:900,added:80,designKg:980,spanMm:3200,aMm:700,deflDiv:500,section:"254x146x37",C:0.5,K2:1.15},
-   notes:["Two crab wheels, each W₁ = W/2, at distance a from the supports.",
-          "Bending uses 10% W; the flange check uses the full W (per the original sheet)."]},
-];
-const FUTURE=[
-  {tab:"4 · Compound Runway"},{tab:"8–11 · Jib Arms / Cols"},
-  {tab:"12 · Davit"},{tab:"14 · C-Hook"},{tab:"15 · Column"},{tab:"16 · A-Frame Leg"},{tab:"17 · Lifting Beam"},
-];
-
-/* ── Core calculation, faithful to each FM1 sheet ── */
-function calc(cfg,s){
-  const total   = (+s.swl) + (+s.added);
-  const duty     = total * cfg.duty;
-  const totalKg = total + duty;
-  const Wact    = totalKg/1000;          // actual total incl. duty %
-  const Wdes    = (+s.designKg)/1000;    // rounded design load (sizing)
-  const Lcm     = (+s.spanMm)/10;
-  const sCm     = ((+s.spanMm)/(+s.deflDiv))/10;
-  const sec     = UB.find(u=>u.n===s.section) || UB[0];
-  const Tcm=sec.flange/10, DT=sec.depth/sec.flange, lry=Lcm/sec.ry;
-  const pbc=pbcLookup(lry,DT);
-  const pbcAllow=(s.pbcOverride!==''&&s.pbcOverride!=null)?Number(s.pbcOverride):pbc.v;
-  const Wpbc=cfg.pbcLoad==='design'?Wdes:Wact;
-  const Wfl =cfg.flangeLoad==='design'?Wdes:Wact;
-
-  let reqIxx,calPbc,defl,calPbcCorrect=null,extra={};
-  if(cfg.model==='central'){
-    reqIxx = Wdes*Lcm**3/(48*E_STEEL*sCm);
-    calPbc = Wpbc*Lcm/(4*sec.Zx);
-    defl   = Wact*Lcm**3/(48*E_STEEL*sec.Ix);
-  } else if(cfg.model==='cantilever'){
-    reqIxx = Wdes*Lcm**3/(3*E_STEEL*sCm);
-    calPbc = Wpbc*Lcm/(4*sec.Zx);            // faithful (house factor)
-    calPbcCorrect = Wpbc*Lcm/sec.Zx;          // true cantilever moment W.L
-    defl   = Wact*Lcm**3/(3*E_STEEL*sec.Ix);
-  } else { // gantry — two crab wheels
-    const aCm=(+s.aMm)/10, k=3*Lcm-4*aCm;
-    reqIxx = (Wdes/2)*aCm**2*k/(6*E_STEEL*sCm);
-    calPbc = 0.1*Wpbc*Lcm/(4*sec.Zx);
-    defl   = (Wact/2)*aCm**2*k/(6*E_STEEL*sec.Ix);
-    extra={wheel:Wact/2, aCm, k};
-  }
-  const flange=1.4*(+s.C)*Wfl/((+s.K2)*Tcm**2);
-
-  return {total,duty,totalKg,Wact,Wdes,Lcm,sCm,reqIxx,sec,Tcm,DT,lry,
-    pbcAuto:pbc.v,pbcOff:pbc.off,pbcAllow,calPbc,calPbcCorrect,flange,defl,extra,
-    okSection:sec.Ix>=reqIxx, okStress:calPbc<=pbcAllow,
-    okStressCorrect: calPbcCorrect==null || calPbcCorrect<=pbcAllow,
-    okFlange:flange<=FLANGE_ALLOW, okDefl:defl<=sCm};
-}
-
-// Built-in regression test — re-runs each sheet's worked example and checks the
-// live formulas against the original spreadsheet's stored cell values.
-const EXPECT={
-  crane:[72321.42857142857,0.4102653631284916,0.46544238813537836,1.7240523553987883],
-  runway:[2480.15873015873,0.7992651835011368,1.1983695652173914,0.6091332959081837],
-  simple:[698.5109126984128,1.276605504587156,2.245777937477542,0.4213888524596989],
-  cantilever:[190.47619047619048,0.05161168607158258,0.4802332561529885,0.03225469587948365],
-  gantry:[202.4652777777778,0.018064516129032256,0.5020804133746609,0.02332213422926166],
-};
-function selfTest(){
-  return SHEETS.map(cfg=>{
-    const r=calc(cfg,{...cfg.d,pbcOverride:""});
-    const got=[r.reqIxx,r.calPbc,r.flange,r.defl], exp=EXPECT[cfg.id];
-    const ok=got.every((g,i)=>Math.abs(g-exp[i])<=Math.max(1e-6,Math.abs(exp[i])*1e-9));
-    return {id:cfg.id,label:cfg.title,ok};
-  });
-}
-
-/* ───────────────────────── UI ───────────────────────── */
+const num=v=>(+v);
 const fmt=(x,dp=2)=>(x==null||!isFinite(x))?"—":Number(x).toLocaleString("en-GB",{minimumFractionDigits:dp,maximumFractionDigits:dp});
 const ACCENT="#2563eb";
 
-function NumIn({value,onChange,step}){
-  return <input type="number" step={step} value={value} onChange={e=>onChange(e.target.value)}
-    className="w-32 rounded border border-blue-300 bg-blue-50 px-2 py-1 text-right tnum text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400" />;
+/* ═════════════ BEAM family (central / cantilever / gantry) ═════════════ */
+const BEAM={
+  crane:   {title:"Crane Beam", model:"central", duty:0.25, pbcLoad:"actual", flangeLoad:"actual", addedLabel:"Added load (HOL / crab)",
+            ixxF:"W.L³ / 48.E.s", deflF:"W.L³ / 48.E.Ixx", pbcF:"W.L / 4.Zxx",
+            d:{swl:2000,added:350,designKg:3000,spanMm:18000,deflDiv:750,section:"610x229x125",C:0.5,K2:1.15},
+            notes:["Worst case: hoist at mid-span — central point load, simply supported."]},
+  gantry:  {title:"Gantry Beam", model:"gantry", duty:0, pbcLoad:"actual", flangeLoad:"actual", addedLabel:"Added load (½ crane beam + end carriage)",
+            ixxF:"W₁.a².(3L−4a)/6.E.s", deflF:"W₁.a².(3L−4a)/6.E.Ixx", pbcF:"(10%W).L / 4.Zxx",
+            d:{swl:900,added:80,designKg:980,spanMm:3200,aMm:700,deflDiv:500,section:"254x146x37",C:0.5,K2:1.15},
+            notes:["Two crab wheels, each W₁ = W/2, at distance a from supports. Bending uses 10%W; flange uses full W."]},
+  runway:  {title:"Runway Beam", model:"central", duty:0.25, pbcLoad:"actual", flangeLoad:"actual", addedLabel:"Added load (HOL / crab)",
+            ixxF:"W.L³ / 48.E.s", deflF:"W.L³ / 48.E.Ixx", pbcF:"W.L / 4.Zxx",
+            d:{swl:1500,added:75,designKg:2000,spanMm:5000,deflDiv:500,section:"254x102x28",C:0.5,K2:1.15},
+            notes:["Same engine as the crane beam (central point load), L/500 deflection."]},
+  compound:{title:"Compound Runway Beam", model:"central", duty:0.25, pbcLoad:"actual", flangeLoad:"design", addedLabel:"Added load (HOL / crab)",
+            ixxF:"W.L³ / 48.E.s", deflF:"W.L³ / 48.E.Ixx", pbcF:"W.L / 4.Zxx", customSection:true,
+            d:{swl:2000,added:200,designKg:2800,spanMm:12000,deflDiv:750,C:0.5,K2:1.15,
+               cDepth:457,cFlange:15,cIx:38136.705,cZx:2114.0983,cRy:10.0833},
+            notes:["Built-up section (UB + capping channel + rail). Section properties come from the parallel-axis 'Compound Beam' calc — entered as the custom section here.",
+                   "Flange-load check uses the rounded design load (per the original sheet)."]},
+  cantilever:{title:"Cantilever Beam", model:"cantilever", duty:0.25, pbcLoad:"actual", flangeLoad:"design", addedLabel:"Added load (HOL / crab)",
+            ixxF:"W.L³ / 3.E.s", deflF:"W.L³ / 3.E.Ixx", pbcF:"W.L / 4.Zxx",
+            d:{swl:333,added:50,designKg:480,spanMm:1000,deflDiv:250,section:"203x133x25",C:0.5,K2:1.15},
+            notes:["Tip point load. Sizing & deflection use the correct cantilever 1/3 factor.",
+                   "⚠ Bending uses the crane-beam W.L/4.Zxx factor; a true cantilever moment is W.L, so the correct stress is 4× higher (shown below). Reproduced as-is — confirm with the responsible engineer."]},
+  simple:  {title:"Simply Supported Beam", model:"central", duty:0.25, pbcLoad:"design", flangeLoad:"actual", addedLabel:"Added load (½ crane beam)",
+            ixxF:"W.L³ / 48.E.s", deflF:"W.L³ / 48.E.Ixx", pbcF:"W.L / 4.Zxx",
+            d:{swl:1600,added:150,designKg:2200,spanMm:2530,deflDiv:500,section:"152x89x16",C:0.5,K2:1.15},
+            notes:["Sheet quirk: the bending cell references the rounded design load, not the actual total — reproduced as-is."]},
+  jibarm8: {title:"Overbraced Jib Arm", model:"central", duty:0.25, pbcLoad:"design", flangeLoad:"actual", addedLabel:"Added load (HOL / crab)",
+            ixxF:"W.L³ / 48.E.s", deflF:"W.L³ / 48.E.Ixx", pbcF:"W.L / 4.Zxx",
+            d:{swl:1000,added:50,designKg:1400,spanMm:5000,deflDiv:500,section:"203x133x25",C:0.5,K2:1.15},
+            notes:["Simply-supported arm (central point load). Bending uses the design load; flange uses the actual total."]},
+  jibarm9: {title:"Underbraced Jib Arm", model:"cantilever", duty:0.25, pbcLoad:"actual", flangeLoad:"design", addedLabel:"Added load (HOL / crab)",
+            ixxF:"W.L³ / 3.E.s", deflF:"W.L³ / 3.E.Ixx", pbcF:"W.L / 4.Zxx",
+            d:{swl:160,added:100,designKg:330,spanMm:3000,deflDiv:250,section:"203x102x23",C:0.5,K2:1.15},
+            notes:["Cantilever arm (tip load), same wiring as the cantilever beam."]},
+};
+function sectOf(cfg,s){
+  if(cfg.customSection) return {n:"custom",depth:num(s.cDepth),flange:num(s.cFlange),Ix:num(s.cIx),Zx:num(s.cZx),ry:num(s.cRy)};
+  return UB.find(u=>u.n===s.section)||UB[0];
 }
-function Field({label,unit,note,children}){
+function calcBeam(cfg,s){
+  const total=num(s.swl)+num(s.added), duty=total*cfg.duty, totalKg=total+duty;
+  const Wact=totalKg/1000, Wdes=num(s.designKg)/1000;
+  const Lcm=num(s.spanMm)/10, sCm=(num(s.spanMm)/num(s.deflDiv))/10;
+  const sec=sectOf(cfg,s), Tcm=sec.flange/10, DT=sec.depth/sec.flange, lry=Lcm/sec.ry;
+  const pbc=pbcLookup(lry,DT);
+  const pbcAllow=(s.pbcOverride!==''&&s.pbcOverride!=null)?num(s.pbcOverride):pbc.v;
+  const Wpbc=cfg.pbcLoad==='design'?Wdes:Wact, Wfl=cfg.flangeLoad==='design'?Wdes:Wact;
+  let reqIxx,calPbc,defl,calPbcCorrect=null;
+  if(cfg.model==='central'){ reqIxx=Wdes*Lcm**3/(48*E_STEEL*sCm); calPbc=Wpbc*Lcm/(4*sec.Zx); defl=Wact*Lcm**3/(48*E_STEEL*sec.Ix); }
+  else if(cfg.model==='cantilever'){ reqIxx=Wdes*Lcm**3/(3*E_STEEL*sCm); calPbc=Wpbc*Lcm/(4*sec.Zx); calPbcCorrect=Wpbc*Lcm/sec.Zx; defl=Wact*Lcm**3/(3*E_STEEL*sec.Ix); }
+  else { const aCm=num(s.aMm)/10, k=3*Lcm-4*aCm; reqIxx=(Wdes/2)*aCm**2*k/(6*E_STEEL*sCm); calPbc=0.1*Wpbc*Lcm/(4*sec.Zx); defl=(Wact/2)*aCm**2*k/(6*E_STEEL*sec.Ix); }
+  const flange=1.4*num(s.C)*Wfl/(num(s.K2)*Tcm**2);
+  return {totalKg,Wact,Wdes,Lcm,sCm,reqIxx,sec,DT,lry,pbcAuto:pbc.v,pbcOff:pbc.off,pbcAllow,calPbc,calPbcCorrect,flange,defl,
+    okSection:sec.Ix>=reqIxx, okStress:calPbc<=pbcAllow, okStressCorrect:calPbcCorrect==null||calPbcCorrect<=pbcAllow,
+    okFlange:flange<=FLANGE_ALLOW, okDefl:defl<=sCm};
+}
+
+/* ═════════════ Jib COLUMN (sheets 10 & 11) ═════════════ */
+function calcJibCol(cfg,s){
+  const dyn1=num(s.dyn1)/1000, W=num(s.designKg)/1000;
+  const A=num(s.A)/10, C=num(s.C)/10, a=num(s.a)/10, b=num(s.b)/10, D=num(s.D)/10;
+  const sCm=A/num(s.deflDiv);
+  let reqIxx;
+  if(cfg.id==='jibcol10') reqIxx=(W*num(s.deflDiv)/E_STEEL)*((a+b)*C + b**2/3);   // (W·250/E)·((a+b)C + b²/3)
+  else reqIxx=(W/(E_STEEL*sCm))*(C**3/3 + C**2*a);                                  // (W/E·s)·(C³/3 + C²·a)
+  const F=a*dyn1/D;                                                                  // bolt uplift, a·DYN1/D
+  return {reqIxx, F, sCm, selIx:num(s.selIx), ok:num(s.selIx)>=reqIxx};
+}
+
+/* ═════════════ DAVIT (sheet 12) ═════════════ */
+function calcDavit(s){
+  const total=num(s.swl)+num(s.hcb), W=num(s.designKg)/1000;
+  const A=num(s.A)/10, B=num(s.B)/10, C=num(s.C)/10, D=num(s.D)/10, e=num(s.e)/10;
+  const sCm=(A+C)/num(s.deflDiv);
+  const M=C*W;                                   // bending moment, t·cm
+  const reqIxx=(M*B/(E_STEEL*sCm))*(D+e/6);
+  const armZ=W*B/(4*num(s.z));                    // required arm section modulus
+  return {W,totalKg:total*1.25,sCm,M,reqIxx,armZ,selIx:num(s.selIx),ok:num(s.selIx)>=reqIxx};
+}
+
+/* ═════════════ Section-modulus forms (C-hook 14, Lift beam 17) ═════════════ */
+const SECTMOD={
+  chook:   {title:"C-Hook", proofMult:2.0, leverLabel:"L = A + B", avail:"bd2", zDefault:1.64,
+            note:"Proof = 2 × SWL. Required Z = W·(A+B)/4z; available Z of the section = b·d²/6."},
+  liftbeam:{title:"Lifting Beam (11–160 t)", proofMult:1.28, leverLabel:"L = A + B", avail:"manual", zDefault:1.64,
+            note:"Proof = 1.28 × SWL. Required Z = W·(A+B)/4z; compare to the section's X-X modulus."},
+};
+function calcSectMod(cfg,s){
+  const proof=num(s.swl)*cfg.proofMult/1000;      // t
+  const lever=(num(s.A)+num(s.B))/10;              // cm
+  const Zreq=proof*lever/(4*num(s.z));
+  const Zavail=cfg.avail==='bd2' ? (num(s.bb)/10)*((num(s.dd)/10)**2)/6 : num(s.availZ);
+  return {proof,lever,Zreq,Zavail,ok:Zavail>=Zreq};
+}
+
+/* ═════════════ COLUMN (sheet 15) ═════════════ */
+function calcColumn15(s){
+  const DYN1=(num(s.swl)+num(s.dead))*1.25;        // kg
+  const tenPct=DYN1*0.1, W=num(s.designKg)/1000;
+  const Lcm=num(s.L)/10, Dcm=num(s.D)/10;
+  const Zreq=W*Lcm/(4*num(s.z));
+  const weight=num(s.wtm)*num(s.L)/1000;           // kg
+  const F=Lcm*W/Dcm;                               // bolt uplift, L·W/D
+  return {DYN1,tenPct,W,Lcm,Zreq,Zavail:num(s.availZ),weight,F,ok:num(s.availZ)>=Zreq};
+}
+
+/* ═════════════ STRESS (sheet 13) ═════════════ */
+function calcStress(s){
+  const proof=num(s.proof)/1000;                   // t
+  const b=num(s.b)/10, d=num(s.d)/10, D=num(s.Dpin)/10;
+  const rect=proof/(b*d);
+  const circArea=Math.PI*D**2/4, circ=proof/circArea;
+  return {proof,rect,circArea,circ,okR:rect<=num(s.allowR),okC:circ<=num(s.allowC)};
+}
+
+/* ═════════════ A-FRAME LEG (sheet 16) — combined bending + axial, N/mm² ═════════════ */
+function calcAframe(s){
+  const Qh=num(s.designLoad)*num(s.dynPct)/100;     // 10% dynamic, kg
+  const fc=(num(s.loadPerLeg)*G)/(num(s.area)*100);                 // N/mm²
+  const fbcx=(Qh*num(s.legLen)*G)/(num(s.Zx)*100);                  // N/mm²
+  const lambda=num(s.effLen)/num(s.ry);
+  const interaction=fc/num(s.pc)+fbcx/num(s.pbcx);
+  return {Qh,fc,fbcx,lambda,interaction,ok:interaction<=1};
+}
+
+/* ───────────────────────── self-test (all sheets) ───────────────────────── */
+const EXPECT={
+  crane:{reqIxx:72321.42857142857,calPbc:0.4102653631284916,flange:0.46544238813537836,defl:1.7240523553987883},
+  gantry:{reqIxx:202.4652777777778,calPbc:0.018064516129032256,flange:0.5020804133746609,defl:0.02332213422926166},
+  runway:{reqIxx:2480.15873015873,calPbc:0.7992651835011368,flange:1.1983695652173914,defl:0.6091332959081837},
+  compound:{reqIxx:30000,calPbc:0.3902372936289051,flange:0.757487922705314,defl:1.236154424399527},
+  cantilever:{reqIxx:190.47619047619048,calPbc:0.05161168607158258,flange:0.4802332561529885,defl:0.03225469587948365},
+  simple:{reqIxx:698.5109126984128,calPbc:1.276605504587156,flange:2.245777937477542,defl:0.4213888524596989},
+  jibarm8:{reqIxx:1736.111111111111,calPbc:0.7546356188012074,flange:1.313137809793328,defl:0.6908336870401811},
+  jibarm9:{reqIxx:1178.5714285714287,calPbc:0.1183252427184466,flange:0.23224599978886726,defl:0.666120106579217},
+};
+function approx(a,b){return Math.abs(a-b)<=Math.max(1e-6,Math.abs(b)*1e-9);}
+function selfTest(){
+  const out=[];
+  for(const id in BEAM){ const r=calcBeam(BEAM[id],{...BEAM[id].d,pbcOverride:""}), e=EXPECT[id];
+    out.push({label:BEAM[id].title, ok:approx(r.reqIxx,e.reqIxx)&&approx(r.calPbc,e.calPbc)&&approx(r.flange,e.flange)&&approx(r.defl,e.defl)});}
+  let r;
+  r=calcJibCol(BEAM_NONE.jibcol10,DEF.jibcol10); out.push({label:"Overbraced Jib Column",ok:approx(r.reqIxx,18260.714285714286)&&approx(r.F,3.6842105263157894)});
+  r=calcJibCol(BEAM_NONE.jibcol11,DEF.jibcol11); out.push({label:"Underbraced Jib Column",ok:approx(r.reqIxx,9025.714285714286)&&approx(r.F,2.3076923076923075)});
+  r=calcDavit(DEF.davit); out.push({label:"Davit",ok:approx(r.M,66)&&approx(r.reqIxx,1205.0137362637363)&&approx(r.armZ,9.968749999999998)});
+  r=calcStress(DEF.stress); out.push({label:"Calculated Stress",ok:approx(r.rect,0.4444444444444444)&&approx(r.circArea,5.3092915845667505)&&approx(r.circ,0.37669809015833217)});
+  r=calcSectMod(SECTMOD.chook,DEF.chook); out.push({label:"C-Hook",ok:approx(r.Zreq,94.1158536585366)&&approx(r.Zavail,65.10416666666667)});
+  r=calcColumn15(DEF.column15); out.push({label:"Column",ok:approx(r.Zreq,337.5)&&approx(r.weight,1611)&&approx(r.F,27)});
+  r=calcAframe(DEF.aframe); out.push({label:"A-Frame Leg",ok:approx(r.fc,4.266086956521739)&&approx(r.fbcx,144.15279138099902)&&approx(r.interaction,1.262710079632074)});
+  r=calcSectMod(SECTMOD.liftbeam,DEF.liftbeam); out.push({label:"Lifting Beam",ok:approx(r.Zreq,2341.4634146341464)});
+  return out;
+}
+
+/* ───────────────────────── UI helpers ───────────────────────── */
+function NumIn({value,onChange,step,w="w-28"}){
+  return <input type="number" step={step} value={value} onChange={e=>onChange(e.target.value)}
+    className={w+" rounded border border-blue-300 bg-blue-50 px-2 py-1 text-right tnum text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-400"} />;
+}
+function Field({label,unit,note,wide,children}){
   return (<label className="flex items-center gap-2 py-1.5">
-    <span className="w-48 shrink-0 text-sm text-slate-600">{label}</span>{children}
-    {unit&&<span className="w-10 text-sm text-slate-400">{unit}</span>}
+    <span className={(wide?"w-56":"w-44")+" shrink-0 text-sm text-slate-600"}>{label}</span>{children}
+    {unit&&<span className="w-12 text-sm text-slate-400">{unit}</span>}
     {note&&<span className="text-xs text-slate-400">{note}</span>}
   </label>);
 }
 function Out({label,formula,value,unit,strong}){
   return (<div className="flex items-center gap-2 py-1 border-b border-slate-100">
-    <span className="w-36 shrink-0 text-sm text-slate-600">{label}</span>
-    {formula&&<span className="hidden md:inline w-40 text-xs text-slate-400 italic">{formula}</span>}
+    <span className="w-40 shrink-0 text-sm text-slate-600">{label}</span>
+    {formula&&<span className="hidden md:inline w-44 text-xs text-slate-400 italic">{formula}</span>}
     <span className={"flex-1 text-right tnum "+(strong?"font-semibold text-slate-900":"text-slate-700")}>{value}</span>
-    <span className="w-12 text-sm text-slate-400">{unit}</span>
+    <span className="w-14 text-sm text-slate-400">{unit}</span>
   </div>);
 }
 function Verdict({ok,children}){
@@ -183,54 +233,52 @@ function Verdict({ok,children}){
     <span>{children}</span><span className={"font-bold "+(ok?"text-emerald-600":"text-rose-600")}>{ok?"PASS":"FAIL"}</span>
   </div>);
 }
+function Card({title,children}){ return <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">{title&&<h2 className="font-semibold text-slate-900 mb-3">{title}</h2>}{children}</div>; }
+function Notes({list}){ return <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-900"><ul className="list-disc pl-4 space-y-1">{list.map((n,i)=><li key={i}>{n}</li>)}</ul></div>; }
 
-function BeamSheet({cfg,s,setS}){
-  const r=useMemo(()=>calc(cfg,s),[cfg,s]);
-  const set=(k)=>(v)=>setS(o=>({...o,[k]:v}));
+/* ───────────────────────── Beam sheet ───────────────────────── */
+function BeamSheet({cfg,s,set}){
+  const r=useMemo(()=>calcBeam(cfg,s),[cfg,s]);
   const suggest=Math.ceil(r.totalKg/100)*100;
   return (
     <div className="grid lg:grid-cols-2 gap-5">
-      {/* Inputs */}
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-        <h2 className="font-semibold text-slate-900 mb-1">{cfg.title} — inputs</h2>
-        <p className="text-xs text-slate-400 mb-3">Blue cells = manual input (mirrors the original form).</p>
+      <Card title={cfg.title+" — inputs"}>
+        <p className="text-xs text-slate-400 -mt-2 mb-2">Blue cells = manual input (mirrors the original form).</p>
         <Field label="SWL" unit="kg"><NumIn value={s.swl} onChange={set('swl')}/></Field>
         <Field label={cfg.addedLabel} unit="kg"><NumIn value={s.added} onChange={set('added')}/></Field>
-        {cfg.duty>0 && <div className="my-2 rounded bg-slate-50 px-3 py-2 text-sm text-slate-600 flex justify-between">
-          <span>Total + {Math.round(cfg.duty*100)}% duty</span>
-          <span className="tnum font-medium">{fmt(r.totalKg,1)} kg · {fmt(r.Wact,4)} t</span></div>}
-        <Field label="Design load W (sizing)" unit="kg" note={(+s.designKg)!==suggest?`suggest ${suggest}`:"rounded up"}><NumIn value={s.designKg} onChange={set('designKg')}/></Field>
+        {cfg.duty>0 && <div className="my-2 rounded bg-slate-50 px-3 py-2 text-sm text-slate-600 flex justify-between"><span>Total + {Math.round(cfg.duty*100)}% duty</span><span className="tnum font-medium">{fmt(r.totalKg,1)} kg · {fmt(r.Wact,4)} t</span></div>}
+        <Field label="Design load W (sizing)" unit="kg" note={num(s.designKg)!==suggest?`suggest ${suggest}`:"rounded up"}><NumIn value={s.designKg} onChange={set('designKg')}/></Field>
         <Field label="Span L" unit="mm"><NumIn value={s.spanMm} onChange={set('spanMm')}/></Field>
         {cfg.model==='gantry' && <Field label="Wheel offset a" unit="mm"><NumIn value={s.aMm} onChange={set('aMm')}/></Field>}
-        <Field label="Preferred deflection">
-          <select value={s.deflDiv} onChange={e=>set('deflDiv')(e.target.value)} className="w-32 rounded border border-blue-300 bg-blue-50 px-2 py-1 text-slate-800">
-            <option value={250}>L / 250</option><option value={500}>L / 500</option><option value={750}>L / 750</option></select>
-        </Field>
-        <Field label="Section (UB)">
-          <select value={s.section} onChange={e=>set('section')(e.target.value)} className="w-44 rounded border border-blue-300 bg-blue-50 px-2 py-1 text-slate-800">
-            {UB.map(u=><option key={u.n} value={u.n}>{u.n}</option>)}</select>
-        </Field>
+        <Field label="Preferred deflection"><select value={s.deflDiv} onChange={e=>set('deflDiv')(e.target.value)} className="w-28 rounded border border-blue-300 bg-blue-50 px-2 py-1 text-slate-800"><option value={250}>L / 250</option><option value={500}>L / 500</option><option value={750}>L / 750</option></select></Field>
+        {cfg.customSection ? (
+          <div className="mt-2 rounded-lg border border-slate-200 p-3">
+            <div className="text-sm text-slate-600 mb-1">Compound section (from parallel-axis calc)</div>
+            <div className="grid grid-cols-2 gap-x-3">
+              <Field label="Depth" unit="mm"><NumIn value={s.cDepth} onChange={set('cDepth')} w="w-24"/></Field>
+              <Field label="Flange T" unit="mm"><NumIn value={s.cFlange} onChange={set('cFlange')} w="w-24"/></Field>
+              <Field label="Ixx" unit="cm⁴"><NumIn value={s.cIx} onChange={set('cIx')} w="w-24"/></Field>
+              <Field label="Zxx" unit="cm³"><NumIn value={s.cZx} onChange={set('cZx')} w="w-24"/></Field>
+              <Field label="ry" unit="cm"><NumIn value={s.cRy} onChange={set('cRy')} w="w-24"/></Field>
+            </div>
+          </div>
+        ) : (
+          <Field label="Section (UB)"><select value={s.section} onChange={e=>set('section')(e.target.value)} className="w-44 rounded border border-blue-300 bg-blue-50 px-2 py-1 text-slate-800">{UB.map(u=><option key={u.n} value={u.n}>{u.n}</option>)}</select></Field>
+        )}
         <Field label="C (Table 3)"><NumIn value={s.C} onChange={set('C')} step="0.05"/></Field>
         <Field label="K2 (Table 5)"><NumIn value={s.K2} onChange={set('K2')} step="0.05"/></Field>
         <div className="mt-3 rounded-lg border border-slate-200 p-3">
           <div className="flex items-center justify-between text-sm"><span className="text-slate-600">Allowable Pbc — Table 1</span><span className="tnum font-medium">{fmt(r.pbcAuto)} t/cm²</span></div>
-          <div className="text-xs text-slate-400 mt-0.5">at l/ry = {fmt(r.lry,1)}, D/T = {fmt(r.DT,1)}
-            {r.pbcOff && <span className="text-amber-600"> · off-table, clamped — verify effective length / restraint</span>}</div>
-          <label className="flex items-center gap-2 mt-2 text-sm"><span className="text-slate-600">Override</span>
-            <input value={s.pbcOverride} placeholder="auto" onChange={e=>set('pbcOverride')(e.target.value)} className="w-24 rounded border border-blue-300 bg-blue-50 px-2 py-1 text-right tnum"/>
-            <span className="text-slate-400 text-xs">t/cm²</span></label>
+          <div className="text-xs text-slate-400 mt-0.5">at l/ry = {fmt(r.lry,1)}, D/T = {fmt(r.DT,1)}{r.pbcOff && <span className="text-amber-600"> · off-table, clamped — verify restraint</span>}</div>
+          <label className="flex items-center gap-2 mt-2 text-sm"><span className="text-slate-600">Override</span><input value={s.pbcOverride} placeholder="auto" onChange={e=>set('pbcOverride')(e.target.value)} className="w-24 rounded border border-blue-300 bg-blue-50 px-2 py-1 text-right tnum"/><span className="text-slate-400 text-xs">t/cm²</span></label>
         </div>
-      </div>
-
-      {/* Results + checks */}
+      </Card>
       <div className="space-y-4">
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-          <h2 className="font-semibold text-slate-900 mb-3">Results</h2>
+        <Card title="Results">
           <Out label="Required Ixx" formula={cfg.ixxF} value={fmt(r.reqIxx,0)} unit="cm⁴"/>
           <Out label="Section Ixx" value={fmt(r.sec.Ix,0)} unit="cm⁴" strong/>
           <Out label="Section Zxx" value={fmt(r.sec.Zx,0)} unit="cm³"/>
-          <Out label="D/T" value={fmt(r.DT)} unit=""/>
-          <Out label="l/ry" value={fmt(r.lry,1)} unit=""/>
+          <Out label="D/T" value={fmt(r.DT)} unit=""/><Out label="l/ry" value={fmt(r.lry,1)} unit=""/>
           <div className="h-2"></div>
           <Out label="Bending Pbc" formula={cfg.pbcF} value={fmt(r.calPbc,3)} unit="t/cm²"/>
           {r.calPbcCorrect!=null && <Out label="Bending (corrected)" formula="W.L / Zxx" value={fmt(r.calPbcCorrect,3)} unit="t/cm²"/>}
@@ -238,79 +286,292 @@ function BeamSheet({cfg,s,setS}){
           <Out label="Flange load" formula="1.4.C.W / K2.T²" value={fmt(r.flange,3)} unit="t/cm²"/>
           <Out label="Deflection" formula={cfg.deflF} value={fmt(r.defl,3)} unit="cm"/>
           <Out label="Preferred (s)" value={fmt(r.sCm,3)} unit="cm"/>
-        </div>
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 space-y-2">
-          <h2 className="font-semibold text-slate-900 mb-1">Checks</h2>
-          <Verdict ok={r.okSection}>Section Ixx ≥ required ({fmt(r.sec.Ix,0)} ≥ {fmt(r.reqIxx,0)} cm⁴)</Verdict>
-          <Verdict ok={r.okStress}>Bending ≤ allowable Pbc ({fmt(r.calPbc,3)} ≤ {fmt(r.pbcAllow,3)} t/cm²)</Verdict>
-          {r.calPbcCorrect!=null && <Verdict ok={r.okStressCorrect}>Corrected bending ≤ allowable ({fmt(r.calPbcCorrect,3)} ≤ {fmt(r.pbcAllow,3)} t/cm²)</Verdict>}
-          <Verdict ok={r.okFlange}>Flange load ≤ {FLANGE_ALLOW} t/cm² ({fmt(r.flange,3)})</Verdict>
-          <Verdict ok={r.okDefl}>Deflection ≤ preferred ({fmt(r.defl,3)} ≤ {fmt(r.sCm,3)} cm)</Verdict>
-        </div>
-        {cfg.notes && <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-900">
-          <ul className="list-disc pl-4 space-y-1">{cfg.notes.map((n,i)=><li key={i}>{n}</li>)}</ul></div>}
+        </Card>
+        <Card title="Checks">
+          <div className="space-y-2">
+            <Verdict ok={r.okSection}>Section Ixx ≥ required ({fmt(r.sec.Ix,0)} ≥ {fmt(r.reqIxx,0)} cm⁴)</Verdict>
+            <Verdict ok={r.okStress}>Bending ≤ allowable Pbc ({fmt(r.calPbc,3)} ≤ {fmt(r.pbcAllow,3)})</Verdict>
+            {r.calPbcCorrect!=null && <Verdict ok={r.okStressCorrect}>Corrected bending ≤ allowable ({fmt(r.calPbcCorrect,3)} ≤ {fmt(r.pbcAllow,3)})</Verdict>}
+            <Verdict ok={r.okFlange}>Flange load ≤ {FLANGE_ALLOW} t/cm² ({fmt(r.flange,3)})</Verdict>
+            <Verdict ok={r.okDefl}>Deflection ≤ preferred ({fmt(r.defl,3)} ≤ {fmt(r.sCm,3)} cm)</Verdict>
+          </div>
+        </Card>
+        {cfg.notes && <Notes list={cfg.notes}/>}
       </div>
     </div>
   );
 }
 
+/* ───────────────────────── Jib Column sheet ───────────────────────── */
+function JibColumnSheet({cfg,s,set}){
+  const r=useMemo(()=>calcJibCol(cfg,s),[cfg,s]);
+  const ob=cfg.id==='jibcol10';
+  return (
+    <div className="grid lg:grid-cols-2 gap-5">
+      <Card title={cfg.title+" — inputs"}>
+        <Field label="DYN1 — SWL" unit="kg"><NumIn value={s.dyn1} onChange={set('dyn1')}/></Field>
+        <Field label="+ jib-arm weight" unit="kg"><NumIn value={s.armWt} onChange={set('armWt')}/></Field>
+        <div className="my-2 rounded bg-slate-50 px-3 py-2 text-sm text-slate-600 flex justify-between"><span>Total (DYN2)</span><span className="tnum">{fmt(num(s.dyn1)+num(s.armWt),0)} kg</span></div>
+        <Field label="Design load W (DYN2)" unit="kg"><NumIn value={s.designKg} onChange={set('designKg')}/></Field>
+        <Field label="A (height)" unit="mm"><NumIn value={s.A} onChange={set('A')}/></Field>
+        <Field label="C" unit="mm"><NumIn value={s.C} onChange={set('C')}/></Field>
+        <Field label="a" unit="mm"><NumIn value={s.a} onChange={set('a')}/></Field>
+        {ob && <Field label="b" unit="mm"><NumIn value={s.b} onChange={set('b')}/></Field>}
+        <Field label="D (lever for bolt)" unit="mm"><NumIn value={s.D} onChange={set('D')}/></Field>
+        <Field label="Deflection A /" note="denominator"><NumIn value={s.deflDiv} onChange={set('deflDiv')}/></Field>
+        <Field label="Selected tube Ixx" unit="cm⁴"><NumIn value={s.selIx} onChange={set('selIx')}/></Field>
+      </Card>
+      <div className="space-y-4">
+        <Card title="Results">
+          <Out label="Required Ixx" formula={ob?"(W·250/E)·((a+b)C+b²/3)":"(W/E·s)·(C³/3+C²a)"} value={fmt(r.reqIxx,0)} unit="cm⁴" strong/>
+          <Out label="Selected tube Ixx" value={fmt(r.selIx,0)} unit="cm⁴"/>
+          <Out label="Bolt uplift F" formula="a · DYN1 / D" value={fmt(r.F,3)} unit="t"/>
+        </Card>
+        <Card title="Checks"><Verdict ok={r.ok}>Tube Ixx ≥ required ({fmt(r.selIx,0)} ≥ {fmt(r.reqIxx,0)} cm⁴)</Verdict></Card>
+        <Notes list={["Selected tube Ixx and the deflection denominator are manual inputs (blue cells). Bolt uplift sizes the holding-down bolts.",
+                      ob?"Overbraced: Ixx = (W·250/E)·((a+b)·C + b²/3).":"Underbraced: Ixx = (W/E·s)·(C³/3 + C²·a), s = A/250."]}/>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────────────────── Davit sheet ───────────────────────── */
+function DavitSheet({s,set}){
+  const r=useMemo(()=>calcDavit(s),[s]);
+  return (
+    <div className="grid lg:grid-cols-2 gap-5">
+      <Card title="Davit — inputs">
+        <Field label="SWL" unit="kg"><NumIn value={s.swl} onChange={set('swl')}/></Field>
+        <Field label="Added load (HOL)" unit="kg"><NumIn value={s.hcb} onChange={set('hcb')}/></Field>
+        <div className="my-2 rounded bg-slate-50 px-3 py-2 text-sm text-slate-600 flex justify-between"><span>Total + 25%</span><span className="tnum">{fmt(r.totalKg,1)} kg</span></div>
+        <Field label="Design load W (DYN2)" unit="kg"><NumIn value={s.designKg} onChange={set('designKg')}/></Field>
+        <Field label="A" unit="mm"><NumIn value={s.A} onChange={set('A')}/></Field>
+        <Field label="B" unit="mm"><NumIn value={s.B} onChange={set('B')}/></Field>
+        <Field label="C (reach)" unit="mm"><NumIn value={s.C} onChange={set('C')}/></Field>
+        <Field label="D" unit="mm"><NumIn value={s.D} onChange={set('D')}/></Field>
+        <Field label="e" unit="mm"><NumIn value={s.e} onChange={set('e')}/></Field>
+        <Field label="Deflection (A+C)/" note="denominator"><NumIn value={s.deflDiv} onChange={set('deflDiv')}/></Field>
+        <Field label="Allowable z (arm)" unit="t/cm²"><NumIn value={s.z} onChange={set('z')} step="0.1"/></Field>
+        <Field label="Selected tube Ixx" unit="cm⁴"><NumIn value={s.selIx} onChange={set('selIx')}/></Field>
+      </Card>
+      <div className="space-y-4">
+        <Card title="Results">
+          <Out label="Bending moment M" formula="C · W" value={fmt(r.M,2)} unit="t·cm"/>
+          <Out label="Required Ixx" formula="(M·B/E·s)·(D+e/6)" value={fmt(r.reqIxx,0)} unit="cm⁴" strong/>
+          <Out label="Selected tube Ixx" value={fmt(r.selIx,0)} unit="cm⁴"/>
+          <Out label="Required arm Z" formula="W · B / 4z" value={fmt(r.armZ,2)} unit="cm³"/>
+        </Card>
+        <Card title="Checks"><Verdict ok={r.ok}>Column tube Ixx ≥ required ({fmt(r.selIx,0)} ≥ {fmt(r.reqIxx,0)} cm⁴)</Verdict></Card>
+        <Notes list={["Column: required Ixx from the davit overturning, vs the selected tube (manual).","Arm: pick a hollow section with Z ≥ the required arm modulus."]}/>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────────────────── Section-modulus sheet (C-hook, Lift beam) ───────────────────────── */
+function SectModSheet({cfg,s,set}){
+  const r=useMemo(()=>calcSectMod(cfg,s),[cfg,s]);
+  return (
+    <div className="grid lg:grid-cols-2 gap-5">
+      <Card title={cfg.title+" — inputs"}>
+        <Field label="SWL" unit="kg"><NumIn value={s.swl} onChange={set('swl')}/></Field>
+        <div className="my-2 rounded bg-slate-50 px-3 py-2 text-sm text-slate-600 flex justify-between"><span>Proof = {cfg.proofMult} × SWL</span><span className="tnum">{fmt(num(s.swl)*cfg.proofMult,0)} kg · {fmt(r.proof,2)} t</span></div>
+        <Field label="A" unit="mm"><NumIn value={s.A} onChange={set('A')}/></Field>
+        <Field label="B" unit="mm"><NumIn value={s.B} onChange={set('B')}/></Field>
+        <Field label="Allowable z" unit="t/cm²"><NumIn value={s.z} onChange={set('z')} step="0.01"/></Field>
+        {cfg.avail==='bd2' ? (<>
+          <Field label="Section b" unit="mm"><NumIn value={s.bb} onChange={set('bb')}/></Field>
+          <Field label="Section d" unit="mm"><NumIn value={s.dd} onChange={set('dd')}/></Field>
+        </>) : (
+          <Field label="Section Z (X-X)" unit="cm³"><NumIn value={s.availZ} onChange={set('availZ')}/></Field>
+        )}
+      </Card>
+      <div className="space-y-4">
+        <Card title="Results">
+          <Out label="Lever L" formula={cfg.leverLabel} value={fmt(r.lever,1)} unit="cm"/>
+          <Out label="Required Z" formula="W · L / 4z" value={fmt(r.Zreq,2)} unit="cm³" strong/>
+          <Out label="Available Z" formula={cfg.avail==='bd2'?"b · d² / 6":"section X-X"} value={fmt(r.Zavail,2)} unit="cm³"/>
+        </Card>
+        <Card title="Checks"><Verdict ok={r.ok}>Available Z ≥ required ({fmt(r.Zavail,1)} ≥ {fmt(r.Zreq,1)} cm³)</Verdict></Card>
+        <Notes list={[cfg.note]}/>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────────────────── Column sheet (15) ───────────────────────── */
+function Column15Sheet({s,set}){
+  const r=useMemo(()=>calcColumn15(s),[s]);
+  return (
+    <div className="grid lg:grid-cols-2 gap-5">
+      <Card title="Column — inputs">
+        <Field label="SWL" unit="kg"><NumIn value={s.swl} onChange={set('swl')}/></Field>
+        <Field label="Dead load" unit="kg"><NumIn value={s.dead} onChange={set('dead')}/></Field>
+        <div className="my-2 rounded bg-slate-50 px-3 py-2 text-sm text-slate-600"><div className="flex justify-between"><span>DYN1 = (SWL+Dead)×1.25</span><span className="tnum">{fmt(r.DYN1,0)} kg</span></div><div className="flex justify-between"><span>10% of DYN1</span><span className="tnum">{fmt(r.tenPct,0)} kg</span></div></div>
+        <Field label="Horiz. load W" unit="kg" note="rounded up"><NumIn value={s.designKg} onChange={set('designKg')}/></Field>
+        <Field label="Height L" unit="mm"><NumIn value={s.L} onChange={set('L')}/></Field>
+        <Field label="D (base lever)" unit="mm"><NumIn value={s.D} onChange={set('D')}/></Field>
+        <Field label="Allowable z" unit="t/cm²"><NumIn value={s.z} onChange={set('z')} step="0.1"/></Field>
+        <Field label="Section Z (X-X)" unit="cm³"><NumIn value={s.availZ} onChange={set('availZ')}/></Field>
+        <Field label="Section weight" unit="kg/m"><NumIn value={s.wtm} onChange={set('wtm')}/></Field>
+      </Card>
+      <div className="space-y-4">
+        <Card title="Results">
+          <Out label="Required Z" formula="W · L / 4z" value={fmt(r.Zreq,1)} unit="cm³" strong/>
+          <Out label="Available Z" value={fmt(r.Zavail,0)} unit="cm³"/>
+          <Out label="Column weight" formula="kg/m · L" value={fmt(r.weight,0)} unit="kg"/>
+          <Out label="Bolt uplift F" formula="L · W / D" value={fmt(r.F,2)} unit="t"/>
+        </Card>
+        <Card title="Checks"><Verdict ok={r.ok}>Section Z ≥ required ({fmt(r.Zavail,0)} ≥ {fmt(r.Zreq,0)} cm³)</Verdict></Card>
+        <Notes list={["Horizontal design load W = 10% of DYN1, rounded up. Bolt uplift sizes the holding-down bolts."]}/>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────────────────── Stress sheet (13) ───────────────────────── */
+function StressSheet({s,set}){
+  const r=useMemo(()=>calcStress(s),[s]);
+  return (
+    <div className="grid lg:grid-cols-2 gap-5">
+      <Card title="Calculated Stress — inputs">
+        <Field label="SWL" unit="kg"><NumIn value={s.swl} onChange={set('swl')}/></Field>
+        <Field label="Proof load" unit="kg"><NumIn value={s.proof} onChange={set('proof')}/></Field>
+        <div className="text-sm text-slate-600 mt-3 mb-1 font-medium">Rectangular section</div>
+        <Field label="b" unit="mm"><NumIn value={s.b} onChange={set('b')}/></Field>
+        <Field label="d" unit="mm"><NumIn value={s.d} onChange={set('d')}/></Field>
+        <Field label="Allowable (BS4360 43)" unit="t/cm²"><NumIn value={s.allowR} onChange={set('allowR')} step="0.01"/></Field>
+        <div className="text-sm text-slate-600 mt-3 mb-1 font-medium">Circular pin</div>
+        <Field label="Diameter D" unit="mm"><NumIn value={s.Dpin} onChange={set('Dpin')}/></Field>
+        <Field label="Allowable (shear)" unit="t/cm²"><NumIn value={s.allowC} onChange={set('allowC')} step="0.01"/></Field>
+      </Card>
+      <div className="space-y-4">
+        <Card title="Results">
+          <Out label="Rect. stress" formula="Proof / (b·d)" value={fmt(r.rect,3)} unit="t/cm²" strong/>
+          <Out label="Circle area" formula="π·D² / 4" value={fmt(r.circArea,3)} unit="cm²"/>
+          <Out label="Pin stress" formula="Proof / area" value={fmt(r.circ,3)} unit="t/cm²" strong/>
+        </Card>
+        <Card title="Checks"><div className="space-y-2">
+          <Verdict ok={r.okR}>Rectangular ≤ {fmt(num(s.allowR),2)} t/cm² ({fmt(r.rect,3)})</Verdict>
+          <Verdict ok={r.okC}>Pin shear ≤ {fmt(num(s.allowC),2)} t/cm² ({fmt(r.circ,3)})</Verdict>
+        </div></Card>
+        <Notes list={["Direct stress on a rectangular bar and a circular pin under the proof load. Allowable limits per BS4360 grade 43 steel."]}/>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────────────────── A-frame leg sheet (16) ───────────────────────── */
+function AframeSheet({s,set}){
+  const r=useMemo(()=>calcAframe(s),[s]);
+  return (
+    <div className="grid lg:grid-cols-2 gap-5">
+      <Card title="A-Frame Leg — combined stress (N/mm²)">
+        <Field label="Design load" unit="kg"><NumIn value={s.designLoad} onChange={set('designLoad')}/></Field>
+        <Field label="Dynamic %" unit="%"><NumIn value={s.dynPct} onChange={set('dynPct')}/></Field>
+        <Field label="Worst-case load / leg" unit="kg"><NumIn value={s.loadPerLeg} onChange={set('loadPerLeg')}/></Field>
+        <Field label="Leg length" unit="cm"><NumIn value={s.legLen} onChange={set('legLen')}/></Field>
+        <Field label="Effective length" unit="—"><NumIn value={s.effLen} onChange={set('effLen')}/></Field>
+        <div className="text-sm text-slate-600 mt-2 mb-1 font-medium">Section properties</div>
+        <Field label="Ixx" unit="cm⁴"><NumIn value={s.Ix} onChange={set('Ix')}/></Field>
+        <Field label="Zxx" unit="cm³"><NumIn value={s.Zx} onChange={set('Zx')}/></Field>
+        <Field label="r of g" unit="cm"><NumIn value={s.ry} onChange={set('ry')} step="0.01"/></Field>
+        <Field label="Area" unit="cm²"><NumIn value={s.area} onChange={set('area')}/></Field>
+        <div className="text-sm text-slate-600 mt-2 mb-1 font-medium">BS449 allowables (manual lookup)</div>
+        <Field label="pc — table 17a" unit="N/mm²"><NumIn value={s.pc} onChange={set('pc')}/></Field>
+        <Field label="pbcx — table 3a" unit="N/mm²"><NumIn value={s.pbcx} onChange={set('pbcx')}/></Field>
+      </Card>
+      <div className="space-y-4">
+        <Card title="Results">
+          <Out label="Axial fc" formula="Load·g / Area" value={fmt(r.fc,3)} unit="N/mm²"/>
+          <Out label="Bending fbcx" formula="Qh·L·g / Zxx" value={fmt(r.fbcx,3)} unit="N/mm²"/>
+          <Out label="Slenderness λ" formula="Eff.lg / r" value={fmt(r.lambda,1)} unit=""/>
+          <Out label="Interaction" formula="fc/pc + fbcx/pbcx" value={fmt(r.interaction,3)} unit="≤ 1" strong/>
+        </Card>
+        <Card title="Checks"><Verdict ok={r.ok}>fc/pc + fbcx/pbcx ≤ 1 ({fmt(r.interaction,3)})</Verdict></Card>
+        <Notes list={["Combined axial + bending interaction per BS449. pc (from table 17a by slenderness) and pbcx (from table 3a by D/T) are read from BS449 and entered manually — the original sheet does the same."]}/>
+      </div>
+    </div>
+  );
+}
+
+/* ───────────────────────── Tabs / state ───────────────────────── */
+const BEAM_NONE={ jibcol10:{id:'jibcol10'}, jibcol11:{id:'jibcol11'} };
+const DEF={
+  jibcol10:{dyn1:1000,armWt:150,designKg:1200,A:4000,C:3500,a:3500,b:150,D:950,deflDiv:250,selIx:18390},
+  jibcol11:{dyn1:500,armWt:300,designKg:800,A:3000,C:2700,a:3000,b:0,D:650,deflDiv:250,selIx:2016},
+  davit:{swl:160,hcb:10,designKg:220,A:2200,B:2900,C:3000,D:2700,e:300,deflDiv:250,z:1.6,selIx:433},
+  stress:{swl:1000,proof:2000,b:15,d:30,Dpin:26,allowR:1.05,allowC:0.77},
+  chook:{swl:900,A:1715,B:1715,z:1.64,bb:25,dd:125},
+  liftbeam:{swl:40000,A:1500,B:1500,z:1.64,availZ:2995},
+  column15:{swl:12500,dead:6500,designKg:2400,L:9000,D:800,z:1.6,availZ:4935,wtm:179},
+  aframe:{designLoad:15000,dynPct:10,loadPerLeg:3000,legLen:1000,effLen:2000,Ix:18720,Zx:1021,ry:3.85,area:69,pc:25,pbcx:132},
+};
+const TABS=[
+  {id:'crane',     tab:'1 · Crane Beam',      kind:'beam'},
+  {id:'gantry',    tab:'2 · Gantry Beam',     kind:'beam'},
+  {id:'runway',    tab:'3 · Runway Beam',     kind:'beam'},
+  {id:'compound',  tab:'4 · Compound Runway', kind:'beam'},
+  {id:'cantilever',tab:'6 · Cantilever',      kind:'beam'},
+  {id:'simple',    tab:'7 · Simply Supported',kind:'beam'},
+  {id:'jibarm8',   tab:'8 · Jib Arm (OB)',    kind:'beam'},
+  {id:'jibarm9',   tab:'9 · Jib Arm (UB)',    kind:'beam'},
+  {id:'jibcol10',  tab:'10 · Jib Column (OB)',kind:'jibcol'},
+  {id:'jibcol11',  tab:'11 · Jib Column (UB)',kind:'jibcol'},
+  {id:'davit',     tab:'12 · Davit',          kind:'davit'},
+  {id:'stress',    tab:'13 · Stress',         kind:'stress'},
+  {id:'chook',     tab:'14 · C-Hook',         kind:'sectmod'},
+  {id:'column15',  tab:'15 · Column',         kind:'column15'},
+  {id:'aframe',    tab:'16 · A-Frame Leg',    kind:'aframe'},
+  {id:'liftbeam',  tab:'17 · Lifting Beam',   kind:'sectmod'},
+];
+const JIBCOL_CFG={jibcol10:{id:'jibcol10',title:'Overbraced Jib Column'},jibcol11:{id:'jibcol11',title:'Underbraced Jib Column'}};
+
+function initialState(){
+  const m={};
+  for(const t of TABS){
+    if(t.kind==='beam') m[t.id]={...BEAM[t.id].d,pbcOverride:""};
+    else m[t.id]={...DEF[t.id]};
+  }
+  return m;
+}
+
 function App(){
   const [tab,setTab]=useState("crane");
-  const [stateMap,setStateMap]=useState(()=>Object.fromEntries(SHEETS.map(sh=>[sh.id,{...sh.d,pbcOverride:""}])));
-  const cfg=SHEETS.find(sh=>sh.id===tab);
+  const [stateMap,setStateMap]=useState(initialState);
+  const meta=TABS.find(t=>t.id===tab);
   const s=stateMap[tab];
-  const setS=(updater)=>setStateMap(m=>({...m,[tab]:updater(m[tab])}));
+  const set=(k)=>(v)=>setStateMap(m=>({...m,[tab]:{...m[tab],[k]:v}}));
   const tests=useMemo(()=>selfTest(),[]);
   const allPass=tests.every(t=>t.ok);
+
+  let body=null;
+  if(meta.kind==='beam') body=<BeamSheet cfg={BEAM[tab]} s={s} set={set}/>;
+  else if(meta.kind==='jibcol') body=<JibColumnSheet cfg={JIBCOL_CFG[tab]} s={s} set={set}/>;
+  else if(meta.kind==='davit') body=<DavitSheet s={s} set={set}/>;
+  else if(meta.kind==='sectmod') body=<SectModSheet cfg={SECTMOD[tab]} s={s} set={set}/>;
+  else if(meta.kind==='column15') body=<Column15Sheet s={s} set={set}/>;
+  else if(meta.kind==='stress') body=<StressSheet s={s} set={set}/>;
+  else if(meta.kind==='aframe') body=<AframeSheet s={s} set={set}/>;
 
   return (
     <div className="min-h-screen text-slate-800">
       <div className="bg-slate-800 text-white">
         <div className="max-w-6xl mx-auto px-5 py-4 flex items-center justify-between flex-wrap gap-2">
-          <div><h1 className="text-lg font-semibold">FM1 Design Workbook</h1>
-            <p className="text-slate-300 text-sm">Proof of competence — lifting structures</p></div>
+          <div><h1 className="text-lg font-semibold">FM1 Design Workbook</h1><p className="text-slate-300 text-sm">Proof of competence — lifting structures</p></div>
           <span className="rounded-full bg-blue-600/90 px-3 py-1 text-xs font-medium">BS 2853:1957 (inc. amm. 1–4)</span>
         </div>
         <div className="max-w-6xl mx-auto px-3 flex gap-1 overflow-x-auto">
-          {SHEETS.map(sh=><button key={sh.id} onClick={()=>setTab(sh.id)}
-            className={"whitespace-nowrap px-3 py-2 text-sm rounded-t "+(tab===sh.id?"bg-slate-100 text-slate-900 font-medium":"text-slate-200 hover:bg-slate-700")}>{sh.tab}</button>)}
-          {FUTURE.map((sh,i)=><span key={i} className="whitespace-nowrap px-3 py-2 text-sm text-slate-500 cursor-not-allowed">{sh.tab} ·</span>)}
+          {TABS.map(t=><button key={t.id} onClick={()=>setTab(t.id)} className={"whitespace-nowrap px-3 py-2 text-sm rounded-t "+(tab===t.id?"bg-slate-100 text-slate-900 font-medium":"text-slate-200 hover:bg-slate-700")}>{t.tab}</button>)}
         </div>
       </div>
-
       <div className="max-w-6xl mx-auto px-5 py-5">
-        <div className={"mb-4 rounded-lg border px-4 py-2 text-sm flex items-center justify-between flex-wrap gap-2 "+
-            (allPass?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-rose-200 bg-rose-50 text-rose-800")}>
-          <span><b>{allPass?"✓ Verified":"✗ Mismatch"}</b> — live formulas reproduce the original FM1 spreadsheet for all {tests.length} beam sheets.</span>
-          <span className="text-xs tnum">{tests.map(t=>(t.ok?"✓":"✗")+" "+t.label.split(" ")[0]).join("  ")}</span>
+        <div className={"mb-4 rounded-lg border px-4 py-2 text-sm flex items-center justify-between flex-wrap gap-2 "+(allPass?"border-emerald-200 bg-emerald-50 text-emerald-800":"border-rose-200 bg-rose-50 text-rose-800")}>
+          <span><b>{allPass?"✓ Verified":"✗ Mismatch"}</b> — live formulas reproduce the original FM1 spreadsheet for all {tests.length} sheets.</span>
+          <span className="text-xs">{tests.filter(t=>!t.ok).length===0?"all sheets tie out to stored cell values":tests.filter(t=>!t.ok).map(t=>"✗ "+t.label).join(", ")}</span>
         </div>
-
-        <BeamSheet cfg={cfg} s={s} setS={setS}/>
-
-        <div className="mt-5 grid lg:grid-cols-2 gap-5">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-            <h3 className="text-sm font-medium text-slate-700 mb-2">Provenance</h3>
-            <ul className="list-disc pl-4 space-y-1 text-sm text-slate-600">
-              <li>Formulas reconstructed from the FM1 sheet's printed algebra and verified against its stored cell values.</li>
-              <li>Allowable Pbc read from <b>Table 1</b> (BS15 steel) by bilinear interpolation; clamped &amp; flagged beyond l/ry = 300.</li>
-              <li>Section properties from the workbook's "Section misc" register; C (Table 3) and K2 (Table 5) per BS 2853.</li>
-              <li className="text-amber-700">BS 2853:1957 is withdrawn; retained as the firm's documented design practice. Results require a competent-engineer check.</li>
-            </ul>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-            <h3 className="text-sm font-medium text-slate-700 mb-2">Load basis (reproduced exactly from the form)</h3>
-            <table className="w-full text-xs text-slate-600">
-              <thead><tr className="text-left text-slate-400"><th className="py-1">Cell</th><th>Load used</th></tr></thead>
-              <tbody>
-                <tr className="border-t border-slate-100"><td className="py-1">Required Ixx (sizing)</td><td>rounded design load</td></tr>
-                <tr className="border-t border-slate-100"><td className="py-1">Bending Pbc</td><td>actual total <span className="text-slate-400">(Simply Supported: design)</span></td></tr>
-                <tr className="border-t border-slate-100"><td className="py-1">Flange load</td><td>actual total <span className="text-slate-400">(Cantilever: design)</span></td></tr>
-                <tr className="border-t border-slate-100"><td className="py-1">Deflection</td><td>actual total</td></tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-        <p className="text-center text-xs text-slate-400 mt-6">Compliance with BS 2853:1957 inc. amm. 1, 2, 3 &amp; 4 — design-office use; results require competent engineer check.</p>
+        {body}
+        <p className="text-center text-xs text-slate-400 mt-6">Formulas read from the original FM1 .xls and verified against its stored values. BS 2853:1957 is withdrawn — retained as documented design practice; results require a competent-engineer check.</p>
       </div>
     </div>
   );
