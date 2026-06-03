@@ -534,7 +534,14 @@ function HoistTab({h,set,r,unit}){
               <Field label="β₂" hint="× v_h [m/s], default — confirm"><Num value={h.beta2} min="0" step="0.01" onChange={e=>set("beta2",e.target.value)}/></Field>
             </div>
           )}
-          <Field label="Brake safety factor" hint="× static load torque (EN 13135 / EN 14492-2)"><Num value={h.brakeSF} min="1" step="0.1" onChange={e=>set("brakeSF",e.target.value)}/></Field>
+          <Field label="Brake safety factor" hint="× static LOAD torque (not motor torque) — confirm"><Num value={h.brakeSF} min="1" step="0.05" onChange={e=>set("brakeSF",e.target.value)}/></Field>
+          <div className="flex flex-wrap gap-1 items-center -mt-1">
+            <span className="text-xs text-slate-400 mr-1">typical:</span>
+            <Toggle on={h.brakeSF==1.5} onClick={()=>set("brakeSF",1.5)}>EN 14492-2 ≥1.5</Toggle>
+            <Toggle on={h.brakeSF==1.6} onClick={()=>set("brakeSF",1.6)}>FEM/DIN 1.6–1.8</Toggle>
+            <Toggle on={h.brakeSF==1.75} onClick={()=>set("brakeSF",1.75)}>Hot metal 1.75</Toggle>
+            <Toggle on={h.brakeSF==2.5} onClick={()=>set("brakeSF",2.5)}>Personnel 2.5</Toggle>
+          </div>
         </Group>
 
         <Group title="Acceleration / VFD" open={false}>
@@ -646,7 +653,10 @@ function HoistTab({h,set,r,unit}){
             {h.vfd&&<Row k="Torque-limited max accel" unit="m/s²" v={fmt(r.aTq,2)} badge={{t:"VFD",tone:""}}/>}
             {h.vfd&&<Row k="Steady lowering regen" unit="kW" v={fmt(r.PregenLower,2)} badge={{t:"→ resistor",tone:""}}/>}
           </dl>
-          <p className="text-xs text-slate-400 mt-2">Brake is sized as a factor (≈1.5–2.0, project/standard-dependent) on the <b>static load torque from gravity</b> — <b>not</b> on motor torque — computed lossless (gearbox friction would only help hold) at the motor shaft (×i for a drum-shaft brake). Counterweight is not credited. For dual-brake or dangerous-load (e.g. molten metal) duties each brake / the system factor is higher — confirm against the controlling standard.</p>
+          <div className="text-xs text-slate-500 mt-2 space-y-1">
+            <p>Sized as a factor on the <b>static load torque from gravity</b> — <b>not</b> motor torque — computed lossless (gearbox friction only helps hold) at the motor shaft (×i for a drum-shaft brake). Counterweight is not credited.</p>
+            <p>Reported factors (verify against the controlling standard): <b>EN 14492-2 ≥ 1.5×</b>; <b>FEM 1.001 / DIN 15435 ≈ 1.6–1.8×</b>; <b>hot/molten metal ≈ 1.75×</b>; <b>lifting persons ≈ 2.5×</b>. The brake must be <b>fail-safe</b> (spring-applied, released by power, applied automatically on power loss) and have thermal capacity for the duty. High-risk duties (persons, molten metal, single-failure tolerance) require <b>two independent brakes, each able to hold the load alone</b>; the holding brake is separate from controlled/service (dynamic) braking, which the VFD or a service brake provides.</p>
+          </div>
         </div>
 
         {h.cycEnable&&r.cyc&&(

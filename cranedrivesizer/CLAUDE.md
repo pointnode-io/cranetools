@@ -113,6 +113,25 @@ Referred to the **motor shaft** (where the holding brake usually sits). For a
 brake on the drum/wheel shaft, multiply by the gear ratio `i`. Hoist brake =
 `SF × static load torque` computed lossless (conservative).
 
+**Hoist holding-brake factors (from standards research — secondary sources, the
+primary PDFs were paywalled/403 during the build; KEEP EDITABLE, verify before
+order):** the factor is on the **static load torque from gravity, not motor
+torque**. Reported minimums:
+- **EN 14492-2:2019** — ≥ **1.5×** static torque due to the rated capacity.
+- **FEM 1.001 / DIN 15435** — ≈ **1.6–1.8×** static load torque at the brake shaft.
+- **Hot / molten metal** — ≈ **1.75×**; **lifting persons** — ≈ **2.5×**.
+- **OSHA 1910.179** (US, for context) — 125% of full-load hoisting torque with
+  non-mechanical control braking, 100% with mechanical control braking, 100%
+  each if two brakes.
+
+Qualitative requirements the tool surfaces in its note: the brake must be
+**fail-safe** (spring-applied, released by power, applied automatically on power
+loss) with **thermal capacity** for the duty; high-risk duties (persons, molten
+metal, single-failure tolerance) need **two independent brakes, each able to
+hold the load alone**; the holding brake is distinct from controlled/service
+(dynamic) braking, which the VFD or a service brake provides. Tool default `1.6`,
+with quick-pick presets 1.5 / 1.6 / 1.75 / 2.5.
+
 ## Scope / non-goals
 
 - **Demand, not selection.** Returns the *demanded* power/torque/ratio and the
