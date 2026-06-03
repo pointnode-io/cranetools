@@ -173,3 +173,5 @@ known). Periodically tune `£/t`, margin and parametric curves from outcomes. Th
   calculators standalone and feeding it; quotes persisted → calibration loop.
 - Engine logic to be extracted into reusable pure modules shared by both.
 - One quote = one crane for now (single CraneSpec); multi-crane/project deferred.
+- Catalog presents matching options for the estimator to choose (not auto-pick);
+  manual override always available.
