@@ -338,14 +338,15 @@ function App(){
             <dl className="grid grid-cols-2 gap-y-1.5 text-sm">
               <Row k="Duty-basis power" unit="kW" v={fmt(r.P_duty/1000,2)}/>
               <Row k="Thermal (RMS) power" unit="kW" v={fmt(r.M_rms*2*Math.PI*(x.n_motor_rated||0)/60/1000,2)}/>
-              <Row k="Required power (governing)" unit="kW" v={fmt(r.P_motor_req/1000,2)} strong badge={{t:"max of both",tone:""}}/>
-              <Row k="Next standard motor ≥" unit="kW" v={r.P_motor_rec?fmt(r.P_motor_rec,1):"—"} strong badge={{t:"IEC, rounded up",tone:"def"}}/>
-              <Row k="Motor rated power" unit="kW" v={fmt(r.motorRatedKW,2)} ok={r.power_ok}/>
+              <Row k="Required power (governing)" unit="kW" v={fmt(r.P_motor_req/1000,2)} strong badge={{t:"no margin added",tone:""}}/>
+              <Row k="Smallest standard motor ≥" unit="kW" v={r.P_motor_rec?fmt(r.P_motor_rec,1):"—"} strong badge={{t:"IEC",tone:"def"}}/>
+              <Row k="↳ utilisation at that size" unit="%" v={r.P_motor_rec?fmt(100*r.P_motor_req/1000/r.P_motor_rec,0):"—"}/>
+              <Row k="Motor rated power (entered)" unit="kW" v={fmt(r.motorRatedKW,2)} ok={r.power_ok}/>
               <Row k={"Stall margin (≥"+fmt(x.stallFactor,2)+")"} unit="×" v={fmt(r.stallMargin,2)} ok={r.stall_ok}/>
               <Row k="Thermal utilisation (RMS)" unit="%" v={fmt(r.thermalUtil*100,0)} ok={r.thermal_ok}/>
               <Row k={"Duty %ED (≤"+fmt0(x.motor_ED)+")"} unit="%" v={fmt(r.ED,0)} ok={r.ed_ok}/>
             </dl>
-            <p className="text-xs text-slate-400 mt-2">Required power is the larger of the duty (static/total) and thermal (RMS, accel included) demands, snapped up to the next IEC frame — it will not undersize. The stall-margin and brake checks guard the peak and holding cases.</p>
+            <p className="text-xs text-slate-400 mt-2">Required power carries <b>no added margin</b> — it is the true demand (larger of duty and thermal-RMS). The standard size is just the <b>smallest IEC frame that meets it</b> (not deliberate oversizing); the utilisation shows the headroom. The PASS/FAIL above tests the motor <b>you enter</b> against the requirement, so you can fit an exact/special motor if it's more economical — anything ≥ the requirement passes.</p>
           </div>
 
           <div className="rounded-lg shadow-sm border-2 p-5 print-block" style={{borderColor:(r.brake_2x_ok&&r.brake_proof_ok&&r.brake_static_ok)?"#16a34a":"#dc2626",background:(r.brake_2x_ok&&r.brake_proof_ok&&r.brake_static_ok)?"#f0fdf4":"#fef2f2"}}>
