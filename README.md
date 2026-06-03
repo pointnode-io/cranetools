@@ -13,6 +13,7 @@ Each tool is self-contained in its own top-level directory.
 | Hoist duty calculator | [`hoistdutycalculator/`](hoistdutycalculator/) | Selects the required hoist mechanism duty group from load spectrum + utilization — FEM 9.511 / ISO 4301-1:1986 (M1–M8 / 1Dm–5m) and the current ISO 4301-1:2016 cycle-based scheme, side by side. Single standalone HTML file. |
 | FM1 calcs | [`fm1calcs/`](fm1calcs/) | Live rebuild of the firm's Form FM1 design-practice spreadsheet — proof-of-competence checks to BS 2853:1957. Single standalone HTML file. |
 | Crane drive sizer | [`cranedrivesizer/`](cranedrivesizer/) | Sizes the drive (motor power/torque, gearbox ratio, brake torque) for the hoist, long-travel and cross-travel mechanisms, with the anti-skid drive check for travel. Complements the hoist duty calculator. Single standalone HTML file. |
+| Hoist / winch drive sizer | [`hoistdrivesizer/`](hoistdrivesizer/) | Deep motor · gearbox · brake · inverter sizing for one hoist/winch (serial-hoist / Siemens SINAMICS method): static/dynamic/peak/RMS torque, optimum gear ratio, stall margin, and 125% proof-load + brake/service-factor checks. Recommendations round up so it won't undersize. Single standalone HTML file. |
 
 ### `craneloadingscalc/`
 
@@ -39,6 +40,18 @@ Open the file directly in a browser.
   anti-skid (drive) check for travel. The deliberate complement to the hoist duty
   calculator, which classifies the duty group but does not size the motor
   (it names FEM 9.683 for that).
+
+Open the file directly in a browser.
+
+### `hoistdrivesizer/`
+
+- `hoist-drive-sizer.html` — interactive React calculator that sizes a single
+  hoist/winch drive train (motor, gearbox, holding brake, inverter) by the
+  serial-hoist (Siemens SINAMICS) method: static/dynamic/peak/RMS torque and
+  power, optimum inertia-matched gear ratio, motor stall margin and thermal
+  utilisation, and PASS/FAIL on the 125% proof-load hold and the brake / gearbox
+  service factors. Motor power is the governing of duty and thermal demand,
+  rounded up to the next IEC frame, so it will not undersize.
 
 Open the file directly in a browser.
 
