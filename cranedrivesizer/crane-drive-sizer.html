@@ -1,0 +1,531 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Crane Drive Sizer — hoist / long-travel / cross-travel motor · gearbox · brake</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  body{margin:0}
+  select,input{appearance:auto}
+  @media print{
+    .no-print{display:none!important}
+    body{background:#fff}
+    details{display:none}
+    .print-block{break-inside:avoid}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const {useState,useMemo}=React;
+const ACCENT="#d97706",STEEL="#1e293b";
+const fmt=(x,dp=2)=>(x==null||!isFinite(x))?"—":Number(x).toLocaleString("en-GB",{minimumFractionDigits:dp,maximumFractionDigits:dp});
+const fmt0=(x)=>(x==null||!isFinite(x))?"—":Math.round(x).toLocaleString("en-GB");
+
+// ════════════════════════════════════════════════════════════════════════════
+//  ENGINEERING DATA & FORMULAE
+//
+//  Two kinds of value live here, and they are NOT equal in authority:
+//
+//   (1) KINEMATIC / DYNAMIC RELATIONS — general mechanics, edition-independent:
+//         P = F·v / η         power to overcome a force at a speed
+//         T = 9549.3·P[kW]/n  shaft torque from power & speed   (= P/ω)
+//         i = n_motor / n_out gear ratio to the drum or wheel
+//         J_eq = m·(v/ω)²     translating mass referred to the motor as inertia
+//         F_adh = μ·N         max force a wheel can transmit before it skids
+//       These are exact and must not be "tuned".
+//
+//   (2) EMPIRICAL COEFFICIENTS — adhesion μ, rolling-resistance terms, in-service
+//       wind pressure, brake safety factor. The DEFAULTS below are typical crane
+//       values; the controlling figure depends on the project, the guide/rail and
+//       the governing standard. They are EXPOSED AS EDITABLE INPUTS and flagged
+//       "default — confirm". Do not present a result as normative on a default.
+//
+//  Sizing philosophy: this tool returns the *demanded* power, torque, ratio and
+//  the *minimum* brake torque, plus the anti-skid check. It does NOT pick a
+//  catalogue motor: thermal selection (duty %ED + permissible starts/hour,
+//  FEM 9.683) is a separate check that can govern. See the scope note in-app.
+// ════════════════════════════════════════════════════════════════════════════
+const G=9.80665;                       // m/s², standard gravity
+const Tnm=(kW,n)=>(n>0?9549.296*kW/n:NaN);   // shaft torque [N·m] from power [kW] & speed [rpm]
+const omega=(n)=>2*Math.PI*n/60;             // rad/s from rpm
+
+// Typical coefficient defaults (EDITABLE in the UI — see note above)
+const DEF={
+  muAdh:0.15,        // wheel/rail adhesion, dry indoor steel (range ~0.12 wet … 0.20 dry). FEM/EN guidance.
+  fRoll:0.5,         // rolling-resistance lever arm, mm (steel wheel on steel rail).
+  cFlange:1.5,       // wheel-flange/guide friction factor (~1.1 cylindrical … 2.5 heavy guidance).
+  bearMu:0.02,       // effective bearing friction coeff at the journal (incl. seal drag).
+  windP:250,         // in-service wind pressure, N/m² (EN 13001-2 / FEM order of magnitude).
+  brakeSFhoist:1.6,  // hoist brake torque safety factor on the static load torque (EN 13135 / FEM).
+  etaReev:0.95,      // reeving (sheave) efficiency.
+  etaMech:0.90,      // mechanism (gearbox + drum/wheel) efficiency.
+};
+
+// ── small UI atoms (house style) ────────────────────────────────────────────
+const Badge=({children,tone})=>(
+  <span style={tone==="def"?{background:"#e0f2fe",color:"#075985",border:"1px solid #7dd3fc"}
+                           :{background:"#fef3c7",color:"#92400e",border:"1px solid #fcd34d"}}
+        className="text-[10px] font-semibold px-1.5 py-0.5 rounded ml-1 align-middle whitespace-nowrap">{children}</span>
+);
+const Field=({label,hint,children})=>(
+  <label className="block mb-3">
+    <div className="text-sm font-medium text-slate-700">{label}</div>
+    {hint&&<div className="text-xs text-slate-400 mb-1">{hint}</div>}
+    {children}
+  </label>
+);
+const Num=(props)=>(
+  <input type="number" {...props}
+    className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
+);
+const Sel=({value,onChange,children})=>(
+  <select value={value} onChange={onChange}
+    className="w-full border border-slate-300 rounded px-2 py-1.5 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-400">{children}</select>
+);
+const Row=({k,unit,v,strong,badge})=>(
+  <React.Fragment>
+    <dt className={"text-slate-500 "+(strong?"font-semibold text-slate-700":"")}>{k}{badge&&<Badge tone={badge.tone}>{badge.t}</Badge>}</dt>
+    <dd className={"text-right font-mono "+(strong?"font-bold text-slate-800":"")}>{v}{unit&&<span className="text-slate-400 font-sans"> {unit}</span>}</dd>
+  </React.Fragment>
+);
+const Pill=({ok,children})=>(
+  <span className={"text-xs font-bold px-2 py-0.5 rounded "+(ok?"bg-green-100 text-green-700":"bg-red-100 text-red-700")}>{children}</span>
+);
+
+// ════════════════════════════════════════════════════════════════════════════
+//  HOIST mechanism
+// ════════════════════════════════════════════════════════════════════════════
+function computeHoist(h){
+  const m=(h.mLoad||0)+(h.mTackle||0);          // total lifted mass, kg
+  const W=m*G;                                  // total load force, N
+  const vs=(h.vh||0)/60;                         // hoist speed, m/s
+  const etaTot=(h.etaReev||0)*(h.etaMech||0);
+  const Plift=W*vs/1000;                         // ideal power at the load, kW
+  const Pmot=etaTot>0?Plift/etaTot:NaN;          // motor input power, steady hoisting, kW
+  const Slead=(h.falls>0&&h.etaReev>0)?W/(h.falls*h.etaReev):NaN;  // lead-line rope pull into drum, N
+  const vrope=(h.vh||0)*(h.falls||0);            // rope speed at drum, m/min
+  const Ddm=(h.Dd||0)/1000;
+  const nDrum=Ddm>0?vrope/(Math.PI*Ddm):NaN;     // drum speed, rpm
+  const i=nDrum>0?(h.nMot||0)/nDrum:NaN;          // gear ratio motor→drum
+  const w=omega(h.nMot||0);                       // motor angular speed, rad/s
+  const Tstat=Tnm(Pmot,h.nMot);                  // motor torque, steady hoisting, N·m
+  // acceleration (referred to motor)
+  const a=(h.ta>0)?vs/h.ta:NaN;                   // linear accel, m/s²
+  const Jload=w>0?m*Math.pow(vs/w,2):NaN;        // lifted mass as equivalent inertia at motor, kg·m²
+  const alpha=(h.ta>0)?w/h.ta:NaN;                // motor angular accel, rad/s²
+  const Tacc=(etaTot>0)?((h.Jmot||0)+Jload/etaTot)*alpha:NaN;  // accel torque, N·m
+  const Tpeak=Tstat+Tacc;                         // motor torque during hoist+accel, N·m
+  const Ppeak=Tpeak*w/1000;                       // instantaneous power at end of accel, kW
+  // brake: hold/lower. Load torque referred to the (motor-shaft) brake, lossless = conservative.
+  const Tload=w>0?W*vs/w:NaN;                     // pure load torque at motor shaft (no losses), N·m
+  const Tbrake=(h.brakeSF||0)*Tload;             // required brake torque, N·m
+  const warns=[];
+  if(!(h.vh>0))warns.push("Hoist speed must be greater than 0.");
+  if(!(h.falls>0))warns.push("Number of rope falls must be at least 1.");
+  if(!(h.Dd>0))warns.push("Drum diameter must be greater than 0.");
+  if(!(h.nMot>0))warns.push("Motor speed must be greater than 0.");
+  if(etaTot<=0)warns.push("Efficiencies must be greater than 0.");
+  return {m,W,vs,etaTot,Plift,Pmot,Slead,vrope,nDrum,i,Tstat,a,Jload,Tacc,Tpeak,Ppeak,Tload,Tbrake,warns};
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  TRAVEL mechanism (long-travel or cross-travel)
+// ════════════════════════════════════════════════════════════════════════════
+function computeTravel(t){
+  const m=t.m||0, W=m*G;
+  const vs=(t.v||0)/60;                           // travel speed, m/s
+  const Dwm=(t.Dw||0)/1000;
+  // running (rolling) resistance — FEM running-resistance form, coefficients editable
+  let Froll;
+  if(t.rollMode==="spec"){
+    Froll=(t.wSpec||0)*W/1000;                    // specific resistance, N per kN of weight
+  }else{
+    Froll=(t.Dw>0)?W*(t.cFlange||0)*((t.bearMu||0)*(t.dJourn||0)+2*(t.fRoll||0))/(t.Dw||1):NaN;
+  }
+  const Fgrad=W*((t.grad||0)/1000);               // gradient resistance (grad in ‰)
+  const Fwind=t.outdoor?(t.windP||0)*(t.area||0):0; // in-service wind, N
+  const Fres=Froll+Fgrad+Fwind;                   // steady resisting force, N
+  const Pstat=(t.etaMech>0)?Fres*vs/1000/t.etaMech:NaN;  // steady drive power, kW
+  const nWheel=Dwm>0?(t.v||0)/(Math.PI*Dwm):NaN;  // wheel speed, rpm
+  const i=nWheel>0?(t.nMot||0)/nWheel:NaN;
+  const w=omega(t.nMot||0);
+  const Tstat=Tnm(Pstat,t.nMot);
+  // acceleration
+  const a=(t.ta>0)?vs/t.ta:NaN;
+  const Facc=m*a;                                 // accel force, N (translating mass)
+  const Fdrive=Fres+Facc;                         // tractive force the wheels must transmit, N
+  const Ppeak=(t.etaMech>0)?Fdrive*vs/1000/t.etaMech:NaN;
+  const Jload=w>0?m*Math.pow(vs/w,2):NaN;
+  const alpha=(t.ta>0)?w/t.ta:NaN;
+  const Tacc=(t.etaMech>0)?((t.Jmot||0)+Jload/t.etaMech)*alpha:NaN;
+  const Tpeak=Tstat+Tacc;
+  // anti-skid (driving): force transmissible by the DRIVEN wheels before slip
+  const Ndriven=(t.nW>0)?W*((t.nD||0)/t.nW):NaN;  // normal load on driven wheels (even distribution)
+  const Fadh=(t.muAdh||0)*Ndriven;                 // max tractive force, N
+  const uSkid=Fadh>0?Fdrive/Fadh:NaN;              // utilisation (<1 = no slip)
+  const aMax=(m>0)?(Fadh-Fres)/m:NaN;              // max accel before slip, m/s²
+  // braking / stopping
+  const tb=t.tb||0;
+  const ab=tb>0?vs/tb:NaN;                          // required deceleration, m/s²
+  const sStop=tb>0?vs*tb/2:NaN;                     // stopping distance, m
+  const Fbrake=m*ab-Froll;                          // braking force the brake must add (resistance assists), N
+  const uSkidB=Fadh>0?(m*ab)/Fadh:NaN;             // braking skid utilisation (full inertia vs adhesion)
+  const warns=[];
+  if(!(t.v>0))warns.push("Travel speed must be greater than 0.");
+  if(!(t.Dw>0))warns.push("Wheel diameter must be greater than 0.");
+  if(!(t.nMot>0))warns.push("Motor speed must be greater than 0.");
+  if(!(t.nW>0)||!(t.nD>0))warns.push("Wheel counts must be greater than 0.");
+  if(t.nD>t.nW)warns.push("Driven wheels cannot exceed total wheels.");
+  if(t.etaMech<=0)warns.push("Mechanism efficiency must be greater than 0.");
+  if(isFinite(uSkid)&&uSkid>1)warns.push("Drive anti-skid FAIL: tractive demand exceeds wheel/rail adhesion — add driven wheels, raise μ basis or extend the acceleration time.");
+  return {m,W,vs,Froll,Fgrad,Fwind,Fres,Pstat,nWheel,i,Tstat,a,Facc,Fdrive,Ppeak,Tacc,Tpeak,
+          Ndriven,Fadh,uSkid,aMax,ab,sStop,Fbrake,uSkidB,warns};
+}
+
+// ── shared sub-components ─────────────────────────────────────────────────────
+function ScopeNote(){
+  return (
+    <div className="rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm text-slate-600 print-block">
+      <span className="font-semibold text-slate-700">Demand, not selection.</span> This returns the power,
+      torque, gear ratio and minimum brake torque the duty <b>demands</b>, plus the anti-skid check. It does
+      <b> not</b> pick a catalogue motor: thermal rating is a separate check — duty type (S1–S5 / %ED) and
+      permissible starts per hour to <b>FEM 9.683</b> can govern on short-move, high-cycle duties. Select the next
+      standard frame ≥ the demanded power, verify its breakdown torque covers the peak, and confirm every
+      coefficient flagged <Badge tone="def">default</Badge> against the project and the controlling standard.
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+//  APP
+// ════════════════════════════════════════════════════════════════════════════
+function App(){
+  const [tab,setTab]=useState("hoist");
+  // project / quote stamp
+  const [customer,setCustomer]=useState("");
+  const [quoteNo,setQuoteNo]=useState("");
+  const [dateStr,setDateStr]=useState("");
+  const [preparedBy,setPreparedBy]=useState("");
+
+  // ── HOIST state ──
+  const [h,setH]=useState({
+    mLoad:5000,mTackle:200,vh:8,falls:4,etaReev:DEF.etaReev,etaMech:DEF.etaMech,
+    Dd:400,nMot:1450,ta:1.0,Jmot:0.05,brakeSF:DEF.brakeSFhoist,ED:40,starts:150});
+  const setH1=(k,v)=>setH({...h,[k]:v===""?"":Number(v)});
+
+  // ── LONG-TRAVEL state ──
+  const [lt,setLt]=useState({
+    m:15000,v:40,nW:4,nD:2,Dw:250,rollMode:"calc",dJourn:60,bearMu:DEF.bearMu,fRoll:DEF.fRoll,
+    cFlange:DEF.cFlange,wSpec:13,grad:0,outdoor:false,windP:DEF.windP,area:6,
+    nMot:1450,etaMech:DEF.etaMech,muAdh:DEF.muAdh,Jmot:0.02,ta:5,tb:4});
+  const setLt1=(k,v)=>setLt({...lt,[k]:(k==="rollMode"||k==="outdoor")?v:(v===""?"":Number(v))});
+
+  // ── CROSS-TRAVEL state ──
+  const [ct,setCt]=useState({
+    m:5200,v:20,nW:4,nD:2,Dw:160,rollMode:"calc",dJourn:40,bearMu:DEF.bearMu,fRoll:DEF.fRoll,
+    cFlange:DEF.cFlange,wSpec:13,grad:0,outdoor:false,windP:DEF.windP,area:2,
+    nMot:1450,etaMech:DEF.etaMech,muAdh:DEF.muAdh,Jmot:0.01,ta:2,tb:1.5});
+  const setCt1=(k,v)=>setCt({...ct,[k]:(k==="rollMode"||k==="outdoor")?v:(v===""?"":Number(v))});
+
+  const rH=useMemo(()=>computeHoist(h),[h]);
+  const rLT=useMemo(()=>computeTravel(lt),[lt]);
+  const rCT=useMemo(()=>computeTravel(ct),[ct]);
+
+  const TABS=[["hoist","Hoist"],["lt","Long travel"],["ct","Cross travel"]];
+
+  return (
+    <div className="min-h-screen bg-slate-100 text-slate-800" style={{fontFamily:"system-ui,Segoe UI,Roboto,sans-serif"}}>
+      {/* header */}
+      <div style={{background:STEEL}} className="text-white">
+        <div className="max-w-5xl mx-auto px-5 py-5">
+          <h1 className="text-xl font-bold">Crane Drive Sizer</h1>
+          <p className="text-slate-300 text-sm mt-1">
+            Motor power &amp; torque, gear ratio and minimum brake torque for the
+            <span className="font-semibold text-amber-300"> hoist</span>,
+            <span className="font-semibold text-amber-300"> long-travel</span> and
+            <span className="font-semibold text-amber-300"> cross-travel</span> mechanisms — with the
+            <span className="font-semibold text-amber-300"> anti-skid</span> drive check for travel.
+          </p>
+        </div>
+      </div>
+
+      {/* project / quote stamp + print */}
+      <div className="max-w-5xl mx-auto px-5 pt-5">
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-4 flex flex-wrap items-end gap-3">
+          <label className="text-xs text-slate-600 flex-1 min-w-[140px]">Customer
+            <input value={customer} onChange={e=>setCustomer(e.target.value)} className="mt-0.5 w-full border border-slate-300 rounded px-2 py-1 text-sm" /></label>
+          <label className="text-xs text-slate-600 w-32">Quotation No.
+            <input value={quoteNo} onChange={e=>setQuoteNo(e.target.value)} className="mt-0.5 w-full border border-slate-300 rounded px-2 py-1 text-sm" /></label>
+          <label className="text-xs text-slate-600 w-32">Date
+            <input value={dateStr} onChange={e=>setDateStr(e.target.value)} placeholder="dd/mm/yyyy" className="mt-0.5 w-full border border-slate-300 rounded px-2 py-1 text-sm" /></label>
+          <label className="text-xs text-slate-600 w-32">Prepared by
+            <input value={preparedBy} onChange={e=>setPreparedBy(e.target.value)} className="mt-0.5 w-full border border-slate-300 rounded px-2 py-1 text-sm" /></label>
+          <button onClick={()=>window.print()} className="no-print text-sm bg-slate-700 text-white px-3 py-1.5 rounded hover:bg-slate-800">Print / PDF</button>
+        </div>
+      </div>
+
+      {/* mechanism tabs */}
+      <div className="max-w-5xl mx-auto px-5 pt-5 no-print">
+        <div className="flex gap-1">
+          {TABS.map(([id,label])=>(
+            <button key={id} onClick={()=>setTab(id)}
+              className={"px-4 py-2 text-sm font-medium rounded-t-lg border border-b-0 "+
+                (tab===id?"bg-white text-slate-800 border-slate-200":"bg-slate-200 text-slate-500 border-transparent hover:bg-slate-300")}>
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="max-w-5xl mx-auto px-5 pb-6">
+        {tab==="hoist" && <HoistTab h={h} set={setH1} r={rH}/>}
+        {tab==="lt"    && <TravelTab t={lt} set={setLt1} r={rLT} title="Long-travel (bridge / gantry on the runway)"
+                            massHint="whole crane + trolley + rated load"/>}
+        {tab==="ct"    && <TravelTab t={ct} set={setCt1} r={rCT} title="Cross-travel (trolley / crab on the bridge)"
+                            massHint="trolley/crab + rated load"/>}
+      </div>
+
+      {/* reference / standards */}
+      <div className="max-w-5xl mx-auto px-5 pb-10">
+        <details className="bg-white rounded-lg shadow-sm border border-slate-200 p-5">
+          <summary className="font-bold text-slate-800 cursor-pointer">Formulae &amp; standard basis</summary>
+          <div className="grid md:grid-cols-2 gap-6 mt-4 text-sm text-slate-600">
+            <div>
+              <h3 className="font-semibold text-slate-700 mb-1">Kinematics &amp; dynamics (general mechanics)</h3>
+              <ul className="list-disc pl-4 space-y-1 text-xs">
+                <li><b>Power</b> P = F·v / η &nbsp;(translation) &nbsp;|&nbsp; P = m·g·v / η &nbsp;(hoist)</li>
+                <li><b>Shaft torque</b> T = 9549.3·P[kW] / n[rpm] = P / ω</li>
+                <li><b>Gear ratio</b> i = n<sub>motor</sub> / n<sub>out</sub>, &nbsp; n<sub>out</sub> = v / (π·D)</li>
+                <li><b>Reflected inertia</b> of a moving mass: J<sub>eq</sub> = m·(v/ω)²</li>
+                <li><b>Accel torque</b> T<sub>a</sub> = (J<sub>mot</sub> + J<sub>eq</sub>/η)·α, &nbsp; α = ω / t<sub>a</sub></li>
+                <li><b>Hoist rope pull</b> (lead line) S = m·g / (n<sub>falls</sub>·η<sub>reev</sub>)</li>
+              </ul>
+              <h3 className="font-semibold text-slate-700 mb-1 mt-4">Anti-skid (travel)</h3>
+              <ul className="list-disc pl-4 space-y-1 text-xs">
+                <li>Max tractive force before slip: F<sub>adh</sub> = μ · N<sub>driven</sub></li>
+                <li>N<sub>driven</sub> = W · (driven wheels / total wheels) &nbsp;(even distribution)</li>
+                <li>Demand F<sub>drive</sub> = F<sub>resist</sub> + m·a; require F<sub>drive</sub> ≤ F<sub>adh</sub></li>
+              </ul>
+            </div>
+            <div>
+              <h3 className="font-semibold text-slate-700 mb-1">Running resistance (FEM form)</h3>
+              <p className="text-xs">F<sub>roll</sub> = (W / D<sub>wheel</sub>) · c<sub>flange</sub> · (μ<sub>bearing</sub>·d<sub>journal</sub> + 2·f<sub>roll</sub>) &nbsp; — or a direct specific resistance w [N/kN].</p>
+              <h3 className="font-semibold text-slate-700 mb-1 mt-4">Coefficient defaults <Badge tone="def">editable — confirm</Badge></h3>
+              <ul className="list-disc pl-4 space-y-0.5 text-xs">
+                <li>Adhesion μ = {DEF.muAdh} (≈0.12 wet … 0.20 dry steel)</li>
+                <li>Rolling lever f = {DEF.fRoll} mm; bearing μ = {DEF.bearMu}; flange factor c = {DEF.cFlange}</li>
+                <li>In-service wind p = {DEF.windP} N/m² (EN 13001-2 / FEM order of magnitude)</li>
+                <li>Hoist brake factor = {DEF.brakeSFhoist}× static load torque (EN 13135 / FEM)</li>
+              </ul>
+              <h3 className="font-semibold text-slate-700 mb-1 mt-4">Standards context</h3>
+              <ul className="list-disc pl-4 space-y-0.5 text-xs">
+                <li><b>FEM 9.683</b> — drive selection: duty %ED &amp; permissible starts/hour (governs thermal pick; not computed here).</li>
+                <li><b>EN 13135</b> — equipment / brake requirements.</li>
+                <li><b>EN 13001-2</b> — loads, including wind, for the resisting-force build-up.</li>
+                <li><b>FEM 9.511 / ISO 4301-1</b> — mechanism duty group (use the Hoist Duty Calculator).</li>
+              </ul>
+            </div>
+          </div>
+          <p className="text-xs text-slate-400 mt-4 border-t border-slate-100 pt-3">
+            The kinematic/dynamic relations are exact mechanics. The coefficients are typical values exposed as
+            inputs — the governing figures depend on the project, the wheel/rail or guide, and the controlling
+            standard. Verify before order.
+          </p>
+        </details>
+        <p className="text-center text-xs text-slate-400 mt-4">Levate Solutions Ltd · for crane engineering use · check against the controlling standard before order.</p>
+      </div>
+    </div>
+  );
+}
+
+// ── HOIST tab ─────────────────────────────────────────────────────────────────
+function HoistTab({h,set,r}){
+  return (
+    <div className="bg-white rounded-b-lg rounded-tr-lg shadow-sm border border-slate-200 p-5 grid md:grid-cols-2 gap-6">
+      {/* inputs */}
+      <div>
+        <h2 className="font-bold text-slate-800 mb-3">Hoist inputs</h2>
+        <div className="grid grid-cols-2 gap-x-4">
+          <Field label="Rated load (SWL)" hint="kg"><Num value={h.mLoad} min="0" step="50" onChange={e=>set("mLoad",e.target.value)}/></Field>
+          <Field label="Bottom block / tackle" hint="kg, hook & block mass"><Num value={h.mTackle} min="0" step="10" onChange={e=>set("mTackle",e.target.value)}/></Field>
+          <Field label="Hoisting speed" hint="m/min"><Num value={h.vh} min="0" step="0.5" onChange={e=>set("vh",e.target.value)}/></Field>
+          <Field label="Rope falls" hint="lines supporting the load"><Num value={h.falls} min="1" step="1" onChange={e=>set("falls",e.target.value)}/></Field>
+          <Field label="Drum diameter" hint="mm, pitch dia"><Num value={h.Dd} min="0" step="10" onChange={e=>set("Dd",e.target.value)}/></Field>
+          <Field label="Motor base speed" hint="rpm"><Num value={h.nMot} min="0" step="10" onChange={e=>set("nMot",e.target.value)}/></Field>
+          <Field label="Reeving efficiency" hint="η sheaves"><Num value={h.etaReev} min="0" max="1" step="0.01" onChange={e=>set("etaReev",e.target.value)}/></Field>
+          <Field label="Mechanism efficiency" hint="η gearbox+drum"><Num value={h.etaMech} min="0" max="1" step="0.01" onChange={e=>set("etaMech",e.target.value)}/></Field>
+          <Field label="Acceleration time" hint="s, to full speed"><Num value={h.ta} min="0.1" step="0.1" onChange={e=>set("ta",e.target.value)}/></Field>
+          <Field label="Motor+brake inertia" hint="kg·m², at motor shaft"><Num value={h.Jmot} min="0" step="0.01" onChange={e=>set("Jmot",e.target.value)}/></Field>
+          <Field label="Brake safety factor" hint="× static load torque"><Num value={h.brakeSF} min="1" step="0.1" onChange={e=>set("brakeSF",e.target.value)}/></Field>
+          <div/>
+          <Field label="Duty %ED" hint="for FEM 9.683 note"><Num value={h.ED} min="0" max="100" step="5" onChange={e=>set("ED",e.target.value)}/></Field>
+          <Field label="Starts / hour" hint="for FEM 9.683 note"><Num value={h.starts} min="0" step="10" onChange={e=>set("starts",e.target.value)}/></Field>
+        </div>
+      </div>
+      {/* results */}
+      <div className="space-y-5">
+        {r.warns.length>0 && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+            <div className="font-semibold mb-1">Check inputs</div>
+            <ul className="list-disc pl-5 space-y-0.5">{r.warns.map((w,i)=><li key={i}>{w}</li>)}</ul>
+          </div>
+        )}
+        <div className="rounded-lg shadow-sm border-2 p-5 print-block" style={{borderColor:ACCENT,background:"#fffbeb"}}>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-bold text-slate-800">Required motor &amp; drive</h2>
+            <Badge>P = m·g·v / η</Badge>
+          </div>
+          <dl className="grid grid-cols-2 gap-y-2 text-sm">
+            <Row k="Total lifted mass" unit="kg" v={fmt0(r.m)}/>
+            <Row k="Steady hoisting power" unit="kW" v={fmt(r.Pmot,2)} strong/>
+            <Row k="Motor torque (steady)" unit="N·m" v={fmt(r.Tstat,1)}/>
+            <Row k="Motor torque (hoist + accel)" unit="N·m" v={fmt(r.Tpeak,1)} strong badge={{t:"peak",tone:""}}/>
+            <Row k="Peak power at end of accel" unit="kW" v={fmt(r.Ppeak,2)}/>
+          </dl>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-5 print-block">
+          <h2 className="font-bold text-slate-800 mb-3">Drum, gearbox &amp; rope</h2>
+          <dl className="grid grid-cols-2 gap-y-2 text-sm">
+            <Row k="Lead-line rope pull" unit="kN" v={fmt(r.Slead/1000,2)} badge={{t:"S = m·g/(n·η)",tone:""}}/>
+            <Row k="Rope speed at drum" unit="m/min" v={fmt(r.vrope,1)}/>
+            <Row k="Drum speed" unit="rpm" v={fmt(r.nDrum,1)}/>
+            <Row k="Gearbox ratio i" unit=": 1" v={fmt(r.i,2)} strong/>
+            <Row k="Equivalent load inertia" unit="kg·m²" v={fmt(r.Jload,3)}/>
+          </dl>
+        </div>
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-5 print-block">
+          <h2 className="font-bold text-slate-800 mb-2">Brake</h2>
+          <dl className="grid grid-cols-2 gap-y-2 text-sm">
+            <Row k="Static load torque (motor shaft)" unit="N·m" v={fmt(r.Tload,1)}/>
+            <Row k={"Min. brake torque ("+fmt(h.brakeSF,1)+"×)"} unit="N·m" v={fmt(r.Tbrake,1)} strong badge={{t:"EN 13135 / FEM",tone:""}}/>
+          </dl>
+          <p className="text-xs text-slate-400 mt-2">Brake torque referred to the motor shaft (where the holding brake usually sits). Multiply by the gear ratio for a brake on the drum shaft.</p>
+        </div>
+        <ScopeNote/>
+      </div>
+    </div>
+  );
+}
+
+// ── TRAVEL tab (long-travel & cross-travel share this) ────────────────────────
+function TravelTab({t,set,r,title,massHint}){
+  const skidOK=isFinite(r.uSkid)&&r.uSkid<=1;
+  const skidBOK=isFinite(r.uSkidB)&&r.uSkidB<=1;
+  return (
+    <div className="bg-white rounded-b-lg rounded-tr-lg shadow-sm border border-slate-200 p-5 grid md:grid-cols-2 gap-6">
+      {/* inputs */}
+      <div>
+        <h2 className="font-bold text-slate-800 mb-1">{title}</h2>
+        <p className="text-xs text-slate-400 mb-3">Mass = {massHint}.</p>
+        <div className="grid grid-cols-2 gap-x-4">
+          <Field label="Total moving mass" hint="kg"><Num value={t.m} min="0" step="100" onChange={e=>set("m",e.target.value)}/></Field>
+          <Field label="Travel speed" hint="m/min"><Num value={t.v} min="0" step="1" onChange={e=>set("v",e.target.value)}/></Field>
+          <Field label="Total wheels" hint=""><Num value={t.nW} min="1" step="1" onChange={e=>set("nW",e.target.value)}/></Field>
+          <Field label="Driven wheels" hint=""><Num value={t.nD} min="1" step="1" onChange={e=>set("nD",e.target.value)}/></Field>
+          <Field label="Wheel diameter" hint="mm"><Num value={t.Dw} min="0" step="10" onChange={e=>set("Dw",e.target.value)}/></Field>
+          <Field label="Motor base speed" hint="rpm"><Num value={t.nMot} min="0" step="10" onChange={e=>set("nMot",e.target.value)}/></Field>
+          <Field label="Mechanism efficiency" hint="η gearbox+wheels"><Num value={t.etaMech} min="0" max="1" step="0.01" onChange={e=>set("etaMech",e.target.value)}/></Field>
+          <Field label="Adhesion μ" hint="wheel/rail"><Num value={t.muAdh} min="0" max="1" step="0.01" onChange={e=>set("muAdh",e.target.value)}/></Field>
+          <Field label="Accel time" hint="s"><Num value={t.ta} min="0.1" step="0.1" onChange={e=>set("ta",e.target.value)}/></Field>
+          <Field label="Braking time" hint="s, to stop"><Num value={t.tb} min="0.1" step="0.1" onChange={e=>set("tb",e.target.value)}/></Field>
+          <Field label="Motor inertia" hint="kg·m²"><Num value={t.Jmot} min="0" step="0.01" onChange={e=>set("Jmot",e.target.value)}/></Field>
+          <Field label="Gradient" hint="‰ (per mille)"><Num value={t.grad} min="0" step="0.5" onChange={e=>set("grad",e.target.value)}/></Field>
+        </div>
+
+        <h3 className="font-semibold text-slate-700 text-sm mb-2 mt-2">Running resistance</h3>
+        <div className="flex gap-2 mb-3">
+          <button onClick={()=>set("rollMode","calc")}
+            className={"flex-1 text-xs py-1.5 rounded border "+(t.rollMode==="calc"?"bg-amber-500 text-white border-amber-500":"bg-white text-slate-600 border-slate-300")}>From bearing &amp; rolling</button>
+          <button onClick={()=>set("rollMode","spec")}
+            className={"flex-1 text-xs py-1.5 rounded border "+(t.rollMode==="spec"?"bg-amber-500 text-white border-amber-500":"bg-white text-slate-600 border-slate-300")}>Specific resistance</button>
+        </div>
+        {t.rollMode==="calc"?(
+          <div className="grid grid-cols-2 gap-x-4">
+            <Field label="Journal diameter" hint="mm, bearing bore"><Num value={t.dJourn} min="0" step="5" onChange={e=>set("dJourn",e.target.value)}/></Field>
+            <Field label="Bearing μ" hint="default — confirm"><Num value={t.bearMu} min="0" step="0.001" onChange={e=>set("bearMu",e.target.value)}/></Field>
+            <Field label="Rolling lever f" hint="mm, default — confirm"><Num value={t.fRoll} min="0" step="0.1" onChange={e=>set("fRoll",e.target.value)}/></Field>
+            <Field label="Flange factor c" hint="default — confirm"><Num value={t.cFlange} min="1" step="0.1" onChange={e=>set("cFlange",e.target.value)}/></Field>
+          </div>
+        ):(
+          <Field label="Specific resistance w" hint="N per kN of weight (≈10–20 typical, steel wheel)"><Num value={t.wSpec} min="0" step="1" onChange={e=>set("wSpec",e.target.value)}/></Field>
+        )}
+
+        <label className="flex items-center gap-2 mt-2 text-sm text-slate-700">
+          <input type="checkbox" checked={t.outdoor} onChange={e=>set("outdoor",e.target.checked)}/>
+          Outdoor — include in-service wind
+        </label>
+        {t.outdoor && (
+          <div className="grid grid-cols-2 gap-x-4 mt-2">
+            <Field label="Wind pressure" hint="N/m², default — confirm"><Num value={t.windP} min="0" step="10" onChange={e=>set("windP",e.target.value)}/></Field>
+            <Field label="Projected area" hint="m²"><Num value={t.area} min="0" step="0.5" onChange={e=>set("area",e.target.value)}/></Field>
+          </div>
+        )}
+      </div>
+
+      {/* results */}
+      <div className="space-y-5">
+        {r.warns.length>0 && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+            <div className="font-semibold mb-1">Check inputs</div>
+            <ul className="list-disc pl-5 space-y-0.5">{r.warns.map((w,i)=><li key={i}>{w}</li>)}</ul>
+          </div>
+        )}
+        {/* anti-skid — the headline travel check */}
+        <div className={"rounded-lg shadow-sm border-2 p-5 print-block "} style={{borderColor:skidOK?"#16a34a":"#dc2626",background:skidOK?"#f0fdf4":"#fef2f2"}}>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-bold text-slate-800">Anti-skid (drive)</h2>
+            <Pill ok={skidOK}>{skidOK?"NO SLIP":"SLIP — FAIL"}</Pill>
+          </div>
+          <dl className="grid grid-cols-2 gap-y-2 text-sm">
+            <Row k="Tractive demand (resist + accel)" unit="kN" v={fmt(r.Fdrive/1000,2)}/>
+            <Row k="Adhesion limit μ·N_driven" unit="kN" v={fmt(r.Fadh/1000,2)} badge={{t:"F = μ·N",tone:""}}/>
+            <Row k="Utilisation" unit="" v={fmt(r.uSkid*100,0)+" %"} strong/>
+            <Row k="Max accel before slip" unit="m/s²" v={fmt(r.aMax,2)}/>
+          </dl>
+          <p className="text-xs text-slate-500 mt-2">Driven-wheel load assumes even distribution ({fmt0(t.nD)} of {fmt0(t.nW)} wheels driven). On braking, full inertia vs adhesion gives {fmt(r.uSkidB*100,0)}% {skidBOK?"":"— exceeds adhesion, wheels will lock."}</p>
+        </div>
+
+        <div className="rounded-lg shadow-sm border-2 p-5 print-block" style={{borderColor:ACCENT,background:"#fffbeb"}}>
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="font-bold text-slate-800">Required motor &amp; drive</h2>
+            <Badge>P = F·v / η</Badge>
+          </div>
+          <dl className="grid grid-cols-2 gap-y-2 text-sm">
+            <Row k="Steady drive power" unit="kW" v={fmt(r.Pstat,2)} strong/>
+            <Row k="Motor torque (steady)" unit="N·m" v={fmt(r.Tstat,1)}/>
+            <Row k="Motor torque (steady + accel)" unit="N·m" v={fmt(r.Tpeak,1)} strong badge={{t:"peak",tone:""}}/>
+            <Row k="Peak power at end of accel" unit="kW" v={fmt(r.Ppeak,2)}/>
+            <Row k="Wheel speed" unit="rpm" v={fmt(r.nWheel,1)}/>
+            <Row k="Gearbox ratio i" unit=": 1" v={fmt(r.i,2)} strong/>
+          </dl>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-5 print-block">
+          <h2 className="font-bold text-slate-800 mb-3">Resisting forces &amp; braking</h2>
+          <dl className="grid grid-cols-2 gap-y-2 text-sm">
+            <Row k="Rolling resistance" unit="kN" v={fmt(r.Froll/1000,2)}/>
+            {t.grad>0 && <Row k="Gradient resistance" unit="kN" v={fmt(r.Fgrad/1000,2)}/>}
+            {t.outdoor && <Row k="Wind resistance" unit="kN" v={fmt(r.Fwind/1000,2)}/>}
+            <Row k="Total steady resistance" unit="kN" v={fmt(r.Fres/1000,2)} strong/>
+            <Row k="Acceleration" unit="m/s²" v={fmt(r.a,3)}/>
+            <Row k="Required deceleration" unit="m/s²" v={fmt(r.ab,3)}/>
+            <Row k="Stopping distance" unit="m" v={fmt(r.sStop,2)} strong/>
+          </dl>
+        </div>
+        <ScopeNote/>
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
