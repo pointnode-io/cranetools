@@ -18,14 +18,29 @@ Pick a mechanism tab and enter the duty. For each, it returns:
 | Motor torque (steady + acceleration) | ✓ | ✓ |
 | Gearbox ratio `i = n_motor / n_out` | ✓ | ✓ |
 | Minimum brake torque | ✓ | ✓ |
+| **Next standard motor** (IEC ladder) + breakdown-torque margin | ✓ | ✓ |
+| Drives-per-mechanism load sharing | ✓ | ✓ |
 | Drum speed & lead-line rope pull | ✓ | — |
+| **Reeving** efficiency (derived from sheaves) + ratio | ✓ | — |
+| **Rope safety** `MBL/S ≥ Z_p` and **drum D/d ≥ min** PASS/FAIL | ✓ | — |
+| Hoisting **dynamic factor φ₂** (EN 13001-2) | ✓ | — |
+| Optional **counterweight** (with overhauling/brake handling) | ✓ | — |
 | Resisting forces (rolling / gradient / wind) | — | ✓ |
 | **Anti-skid (drive) check** — tractive demand vs wheel/rail adhesion | — | ✓ |
+| **VFD acceleration** — achievable accel = min(skid, torque) limited | ✓ | ✓ |
+| Regen energy/power (decel & lowering → brake-resistor sizing) | ✓ | ✓ |
 | Required deceleration & stopping distance | — | ✓ |
+| **Indicative duty/energy** — RMS power, %ED, kWh & running cost | ✓ | ✓ |
 
 The **anti-skid check** is the headline travel result: it confirms the driven
 wheels can transmit the acceleration force without slipping (and flags if the
-brake would lock the wheels).
+brake would lock the wheels). Inputs are grouped into collapsible sections so the
+core sizing stays front-and-centre and the advanced options (reeving/rope, VFD,
+duty cycle) expand on demand.
+
+> **Motor pick is acceleration-aware.** Travel motors are sized on the *greater*
+> of the continuous demand and the peak-torque demand ÷ usable overload — sizing
+> on steady running alone would pick a frame too small to accelerate the mass.
 
 ## How it fits the toolkit
 

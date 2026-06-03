@@ -12,8 +12,32 @@ for the three crane mechanisms — **hoist**, **long-travel** and **cross-travel
 - **motor torque** (steady and steady + acceleration)
 - **gearbox ratio** `i = n_motor / n_out`
 - minimum **brake torque**
+- a **"next standard motor" pick** from the IEC kW ladder, with a breakdown-
+  torque margin check
 - for travel: the **anti-skid (drive) check** — tractive demand vs wheel/rail
   adhesion — which is the headline result of the two travel tabs.
+
+### Added feature batches (reeving / VFD / realism / duty-energy)
+
+- **Reeving & rope (hoist):** reeving ratio + diverting sheaves, efficiency
+  *derived* from sheave count & per-sheave η via `η=(1−η_s^n)/(n(1−η_s))·η_s^nDiv`
+  (or manual), lead-line pull, **rope safety** `MBL/S ≥ Z_p` and **drum D/d ≥
+  minimum** PASS/FAIL.
+- **VFD acceleration:** accel input by *time* or *max rate*; achievable accel =
+  `min(skid-limited, torque-limited)` with the limiting factor named; VFD
+  overload factor; **regen** energy/power on travel decel and steady hoist
+  lowering (→ feeds the brake-resistor tool).
+- **Realism:** drives-per-mechanism load sharing; IEC next-standard-motor pick;
+  hoist **φ₂** dynamic factor (EN 13001-2 form); optional **counterweight** with
+  the overhauling/brake nuance handled.
+- **Duty & energy (indicative):** trapezoidal-move RMS torque/power, **%ED**,
+  implied starts/hour, and kWh + running cost per year.
+
+**Motor pick is acceleration-aware.** Travel drives are sized on the *greater*
+of the continuous demand and `peak_torque_demand / usable_overload` — sizing on
+steady running alone picks an absurdly small frame that cannot accelerate the
+mass. `peakFactor = vfd ? vfdOverload : 1.6`. Do not regress this to a
+steady-power-only pick.
 
 It is the deliberate complement to `hoistdutycalculator/`, which classifies the
 mechanism duty group but explicitly **does not** size the motor. This tool picks
@@ -50,17 +74,31 @@ equal in authority. Preserve this distinction in any edit:
    - hoist lead-line pull `S = m·g / (n_falls · η_reev)`
    - anti-skid limit `F_adh = μ · N_driven`, demand `F_drive = F_resist + m·a`
 
-2. **Empirical coefficients — typical DEFAULTS, exposed as editable inputs**,
-   in the `DEF` object. These are project/standard-dependent and must be
-   confirmed; the UI badges them `default — confirm` (the blue `Badge tone="def"`).
-   Never present a result as normative when it rests on a default:
+2. **Empirical / tabulated coefficients — typical DEFAULTS, exposed as editable
+   inputs**, in the `DEF` object. These are project/standard/edition-dependent
+   and must be confirmed; the UI badges them `default — confirm` (blue
+   `Badge tone="def"`). Never present a result as normative when it rests on a
+   default:
    - adhesion `μ ≈ 0.15` (≈0.12 wet … 0.20 dry steel)
    - rolling lever `f = 0.5 mm`, bearing `μ = 0.02`, flange factor `c = 1.5`
    - in-service wind `p = 250 N/m²`
    - hoist brake safety factor `1.6 × static load torque`
-   - reeving/mechanism efficiencies `0.95 / 0.90`
+   - sheave `η_s = 0.98`; mechanism `η = 0.90`
+   - rope coefficient `Z_p = 4.0`; drum `D/d min = 20`
+   - `φ₂,min = 1.1`, `β₂ = 0.34`; breakdown `2.7×`; VFD overload `1.5×`
 
    `g = 9.80665 m/s²` is the only fixed physical constant.
+
+   **Why Z_p / φ₂ / D-d are inputs, not baked tables.** Published values for the
+   rope coefficient of utilisation, the φ₂ coefficients and the drum/sheave D/d
+   minima **disagree across standards and editions** (ISO 4308-1 vs EN 14492-2 vs
+   FEM; 1986 vs current ISO 4301-1 bands) — this was checked during the build and
+   sources genuinely conflict (e.g. Z_p M1–M8 quoted as 2.3–5.0 by one source,
+   3.15–9.0 by others). Rather than assert one set as authoritative — which the
+   repo's "verify against the actual standard text" rule forbids — the tool gives
+   the **formula** and exposes the coefficient. If you ever bake a per-duty-group
+   default table, it MUST be verified against the controlling primary text first,
+   and stay editable.
 
 ### Running resistance
 FEM running-resistance form, with a fallback specific-resistance input:
