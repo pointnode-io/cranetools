@@ -124,6 +124,15 @@ torque**. Reported minimums:
   non-mechanical control braking, 100% with mechanical control braking, 100%
   each if two brakes.
 
+**Two sizing bases are offered** (hoist `brakeBasis`): `load` → factor × static
+load torque (EN 14492-2 / FEM, defaults 1.5/1.6/1.75/2.5); `motor` → factor ×
+**rated motor torque**, the Siemens serial-hoist convention (≈**2.0×**, from the
+Siemens "Serienhebezeuge" SINAMICS sizing example, doc 103156155 — *"the rated
+braking torque is at least twice as high as the rated motor torque"*; that
+example's rated motor torque is 71 N·m). The `motor` basis needs `Trated`, so
+`Tbrake` is finalised after the motor pick. The results card shows the brake as a
+multiple of **both** load and motor torque so either convention can be checked.
+
 Qualitative requirements the tool surfaces in its note: the brake must be
 **fail-safe** (spring-applied, released by power, applied automatically on power
 loss) with **thermal capacity** for the duty; high-risk duties (persons, molten

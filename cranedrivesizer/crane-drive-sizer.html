@@ -190,9 +190,9 @@ function computeHoist(h){
   const ropeOK=isFinite(SFact)&&SFact>=(h.Zp||0);
   const ddActual=(h.ropeDia>0)?(h.Dd||0)/h.ropeDia:NaN; // drum / rope diameter ratio
   const ddOK=isFinite(ddActual)&&ddActual>=(h.minDd||0);
-  // brake — GROSS load, counterweight NOT credited (conservative), referred to motor shaft
+  // brake — GROSS load, counterweight NOT credited (conservative), referred to motor shaft.
+  // (Tbrake is finalised after the motor pick, since the "× motor torque" basis needs Trated.)
   const Tload=w>0?W*vs/w:NaN;                            // gross static load torque, lossless
-  const Tbrake=(h.brakeSF||0)*Tload;
   // drives + motor pick (per drive). Size on the GREATER of the continuous demand
   // and the peak-torque demand divided by the usable short-time overload — so the
   // frame is big enough that its overload covers the acceleration peak.
@@ -204,6 +204,9 @@ function computeHoist(h){
   const Trated=motorKW?Tnm(motorKW,h.nMot):NaN;
   const Tbreak=Trated*(h.breakdownK||0);                 // breakdown torque, N·m
   const breakOK=isFinite(Tbreak)&&TperDrivePeak<=Tbreak;
+  // holding-brake torque: factor × static LOAD torque (EN 14492-2 / FEM), OR
+  // factor × rated MOTOR torque (Siemens serial-hoist convention, ≈2×).
+  const Tbrake=(h.brakeBasis==="motor")?(h.brakeSF||0)*(Trated||0):(h.brakeSF||0)*Tload;
   // VFD achievable accel (torque-limited): budget = min(breakdown, overload×rated)
   const Tavail=Math.min(Tbreak||Infinity,(h.vfdOverload||0)*(Trated||0));
   const Taccbudget=Tavail-Math.abs(TstatDyn)/nDr;        // torque available for accel, per drive
@@ -359,7 +362,7 @@ function App(){
     mLoad:5000,mTackle:200,vh:8,Dd:400,nMot:1450,ta:1.0,Jmot:0.05,etaMech:DEF.etaMech,
     falls:4,etaS:DEF.etaS,nDiv:0,deriveEta:true,etaReevManual:0.95,
     hcEnable:true,phi2min:DEF.phi2min,beta2:DEF.beta2,
-    mCw:0, brakeSF:DEF.brakeSFhoist,
+    mCw:0, brakeSF:DEF.brakeSFhoist, brakeBasis:"load",
     Zp:DEF.Zp,ropeDia:13,ropeMBL:130,minDd:DEF.minDd,
     nDrives:1,breakdownK:DEF.breakdownK,fs:DEF.fs,
     vfd:true,accelMode:"time",accelRate:0.4,vfdOverload:DEF.vfdOverload,regenEff:DEF.regenEff,
@@ -534,13 +537,28 @@ function HoistTab({h,set,r,unit}){
               <Field label="β₂" hint="× v_h [m/s], default — confirm"><Num value={h.beta2} min="0" step="0.01" onChange={e=>set("beta2",e.target.value)}/></Field>
             </div>
           )}
-          <Field label="Brake safety factor" hint="× static LOAD torque (not motor torque) — confirm"><Num value={h.brakeSF} min="1" step="0.05" onChange={e=>set("brakeSF",e.target.value)}/></Field>
+          <div className="text-sm font-medium text-slate-700 mb-1">Holding-brake basis</div>
+          <div className="flex gap-2 mb-2">
+            <Toggle on={h.brakeBasis==="load"} onClick={()=>{set("brakeBasis","load");set("brakeSF",1.6);}}>× static load torque</Toggle>
+            <Toggle on={h.brakeBasis==="motor"} onClick={()=>{set("brakeBasis","motor");set("brakeSF",2.0);}}>× rated motor torque</Toggle>
+          </div>
+          <Field label="Brake safety factor" hint={h.brakeBasis==="motor"?"× rated motor torque (Siemens serial ≈2.0)":"× static LOAD torque (not motor torque)"}><Num value={h.brakeSF} min="1" step="0.05" onChange={e=>set("brakeSF",e.target.value)}/></Field>
           <div className="flex flex-wrap gap-1 items-center -mt-1">
             <span className="text-xs text-slate-400 mr-1">typical:</span>
-            <Toggle on={h.brakeSF==1.5} onClick={()=>set("brakeSF",1.5)}>EN 14492-2 ≥1.5</Toggle>
-            <Toggle on={h.brakeSF==1.6} onClick={()=>set("brakeSF",1.6)}>FEM/DIN 1.6–1.8</Toggle>
-            <Toggle on={h.brakeSF==1.75} onClick={()=>set("brakeSF",1.75)}>Hot metal 1.75</Toggle>
-            <Toggle on={h.brakeSF==2.5} onClick={()=>set("brakeSF",2.5)}>Personnel 2.5</Toggle>
+            {h.brakeBasis==="motor"?(
+              <React.Fragment>
+                <Toggle on={h.brakeSF==2.0} onClick={()=>set("brakeSF",2.0)}>Siemens serial 2.0</Toggle>
+                <Toggle on={h.brakeSF==1.5} onClick={()=>set("brakeSF",1.5)}>1.5</Toggle>
+                <Toggle on={h.brakeSF==2.5} onClick={()=>set("brakeSF",2.5)}>2.5</Toggle>
+              </React.Fragment>
+            ):(
+              <React.Fragment>
+                <Toggle on={h.brakeSF==1.5} onClick={()=>set("brakeSF",1.5)}>EN 14492-2 ≥1.5</Toggle>
+                <Toggle on={h.brakeSF==1.6} onClick={()=>set("brakeSF",1.6)}>FEM/DIN 1.6–1.8</Toggle>
+                <Toggle on={h.brakeSF==1.75} onClick={()=>set("brakeSF",1.75)}>Hot metal 1.75</Toggle>
+                <Toggle on={h.brakeSF==2.5} onClick={()=>set("brakeSF",2.5)}>Personnel 2.5</Toggle>
+              </React.Fragment>
+            )}
           </div>
         </Group>
 
@@ -648,8 +666,10 @@ function HoistTab({h,set,r,unit}){
           <h2 className="font-bold text-slate-800 mb-2">Holding brake &amp; VFD</h2>
           <dl className="grid grid-cols-2 gap-y-2 text-sm">
             <Row k="Static LOAD torque (motor shaft)" unit="N·m" v={fmt(r.Tload,1)} badge={{t:"gravity, lossless",tone:""}}/>
-            <Row k={"Min. brake torque = "+fmt(h.brakeSF,2)+" × load"} unit="N·m" v={fmt(r.Tbrake,1)} strong badge={{t:"EN 13135 / EN 14492-2",tone:""}}/>
-            {r.motorKW&&<Row k="(for reference: × motor rated)" unit="×" v={fmt(r.Tbrake/r.Trated,2)}/>}
+            {r.motorKW&&<Row k="Rated motor torque" unit="N·m" v={fmt(r.Trated,1)}/>}
+            <Row k={"Min. brake torque = "+fmt(h.brakeSF,2)+(h.brakeBasis==="motor"?" × motor":" × load")} unit="N·m" v={fmt(r.Tbrake,1)} strong badge={{t:h.brakeBasis==="motor"?"Siemens serial":"EN 14492-2",tone:""}}/>
+            {r.motorKW&&<Row k="(check: brake ÷ load torque)" unit="×" v={fmt(r.Tbrake/r.Tload,2)}/>}
+            {r.motorKW&&<Row k="(check: brake ÷ motor rated)" unit="×" v={fmt(r.Tbrake/r.Trated,2)}/>}
             {h.vfd&&<Row k="Torque-limited max accel" unit="m/s²" v={fmt(r.aTq,2)} badge={{t:"VFD",tone:""}}/>}
             {h.vfd&&<Row k="Steady lowering regen" unit="kW" v={fmt(r.PregenLower,2)} badge={{t:"→ resistor",tone:""}}/>}
           </dl>
